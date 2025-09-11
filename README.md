@@ -15,25 +15,11 @@ Then, run the following command to initialize your project:
 reforge init
 ```
 
-The tool will automatically ask for the agent you're using and deploy the
-templates needed to start building software through specifications.
+The tool will ask for the agent you're using (Claude Code or Github Copilot)
+and deploy the templates needed to start building software through
+specifications with your coding agent.
 
 Read through the next section to learn how to use the templates.
-
-As we're using more AI in software development it's becoming increasingly
-frustrating to see that coding agents can't get the implementation right when
-a task gets more complicated. There are many reasons why agents suck at
-complex tasks, but one important reason this happens is because the agent
-doesn't have the right context information to do a good job.
-
-Language Models will get better, but this only increases the importance
-of having the right context information for the agent, because without this,
-the agent is only going to make wrong guesses about what the developer
-means.
-
-For this purpose, we came up with an approach where we build the correct
-context for the coding agent through a series of increasingly detailed
-prompts.
 
 ## How does it work?
 
@@ -64,6 +50,10 @@ the agent about the project as you implement more features.
 Currently, we support setting Claude Code and Github Copilot. We may add
 support for other agents in the future. Make sure to submit an issue with your
 suggestions and comments!
+
+## Documentation
+
+- [Architecture documentation](docs/architecture)
 
 ## Frequently asked questions
 
