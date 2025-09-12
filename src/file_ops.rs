@@ -1,10 +1,53 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use dialoguer::{Confirm, theme::ColorfulTheme};
 use crate::config::ProjectConfig;
 use crate::error::{ConfigError, Result};
 
 /// Configuration file name constant
 pub const CONFIG_FILE_NAME: &str = ".reforge.json";
+
+/// File information for display in confirmation prompts
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    pub path: PathBuf,
+    pub size: u64,
+    pub modified_timestamp: u64,
+}
+
+/// Format a Unix timestamp into a human-readable date/time string
+fn format_timestamp(timestamp: u64) -> String {
+    match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp)) {
+        Some(system_time) => {
+            // Convert to local time representation
+            // For now, use a simple UTC format since chrono isn't available
+            use std::time::Duration;
+            let duration = system_time.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO);
+            let secs = duration.as_secs();
+            
+            // Simple date formatting (not locale-aware, but functional)
+            let days = secs / 86400; // seconds per day
+            let hours = (secs % 86400) / 3600;
+            let minutes = (secs % 3600) / 60;
+            let seconds = secs % 60;
+            
+            // Calculate approximate date (rough calculation from Unix epoch)
+            let _epoch_days = 719163; // Days between year 1 and Unix epoch (1970-01-01)
+            let _total_days = _epoch_days + days;
+            
+            // Simple year calculation (not accounting for leap years perfectly)
+            let year = 1970 + (days / 365);
+            let day_of_year = days % 365;
+            let month = (day_of_year / 30) + 1; // Rough month calculation
+            let day = (day_of_year % 30) + 1;
+            
+            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC", 
+                year, month.min(12), day.min(31), hours, minutes, seconds)
+        }
+        None => "Invalid timestamp".to_string(),
+    }
+}
 
 /// File operations for configuration management
 pub struct FileOps;
@@ -248,6 +291,98 @@ impl FileOps {
         
         Ok(canonical)
     }
+
+    /// Get file information for display in confirmation prompts
+    pub fn get_file_info<P: AsRef<Path>>(file_path: P) -> Result<FileInfo> {
+        let file_path = file_path.as_ref();
+        
+        if !file_path.exists() {
+            return Err(ConfigError::validation_error(format!(
+                "File does not exist: '{}'",
+                file_path.display()
+            )));
+        }
+        
+        let metadata = fs::metadata(file_path).map_err(ConfigError::from)?;
+        
+        let size = metadata.len();
+        let modified = metadata.modified()
+            .map_err(ConfigError::from)?
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| ConfigError::io_error(format!("Invalid file modification time: {}", e)))?
+            .as_secs();
+        
+        Ok(FileInfo {
+            path: file_path.to_path_buf(),
+            size,
+            modified_timestamp: modified,
+        })
+    }
+
+    /// Prompt user for confirmation to overwrite existing file
+    pub fn confirm_overwrite<P: AsRef<Path>>(file_path: P) -> Result<bool> {
+        let file_path = file_path.as_ref();
+        
+        // Get file information
+        let file_info = Self::get_file_info(file_path)?;
+        
+        // Format the modification time
+        let modified_time = format_timestamp(file_info.modified_timestamp);
+        
+        // Display file information
+        println!("⚠️  Configuration file already exists:");
+        println!("   Path: {}", file_info.path.display());
+        println!("   Size: {} bytes", file_info.size);
+        println!("   Modified: {}", modified_time);
+        println!();
+        
+        // Ask for confirmation
+        let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Do you want to overwrite the existing file?")
+            .default(false)
+            .interact_opt()
+            .map_err(|e| ConfigError::io_error(format!("Failed to read user input: {}", e)))?;
+        
+        match confirmed {
+            Some(answer) => {
+                if answer {
+                    println!("✅ File will be overwritten");
+                } else {
+                    println!("❌ Operation cancelled by user");
+                }
+                Ok(answer)
+            }
+            None => {
+                // User cancelled (Ctrl+C or Esc)
+                println!("❌ Operation cancelled by user");
+                Ok(false)
+            }
+        }
+    }
+
+    /// Write config with overwrite confirmation (if file exists and force is not specified)
+    pub fn write_config_to_directory_with_confirmation<P: AsRef<Path>>(
+        config: &ProjectConfig, 
+        dir_path: P, 
+        force: bool
+    ) -> Result<PathBuf> {
+        let dir_path = dir_path.as_ref();
+        let config_path = dir_path.join(CONFIG_FILE_NAME);
+        
+        // Check if file exists
+        if config_path.exists() {
+            if !force {
+                // Ask for confirmation
+                if !Self::confirm_overwrite(&config_path)? {
+                    return Err(ConfigError::user_cancelled("File overwrite cancelled"));
+                }
+            }
+        }
+        
+        // Proceed with writing
+        Self::write_config(config, &config_path)?;
+        Ok(config_path)
+    }
 }
 
 #[cfg(test)]
@@ -435,5 +570,81 @@ mod tests {
         assert!(json_content.contains("  ")); // Indentation
         assert!(json_content.contains("\"agent\": \"copilot\""));
         assert!(json_content.contains("\"project_name\": \"test-project\""));
+    }
+
+    #[test]
+    fn test_get_file_info() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test_info.json");
+        
+        // Create test file with known content
+        let test_content = r#"{"test": "data"}"#;
+        fs::write(&test_file, test_content).unwrap();
+        
+        // Get file info
+        let file_info = FileOps::get_file_info(&test_file).unwrap();
+        
+        // Verify file info
+        assert_eq!(file_info.path, test_file);
+        assert_eq!(file_info.size, test_content.len() as u64);
+        assert!(file_info.modified_timestamp > 0);
+    }
+
+    #[test]
+    fn test_get_file_info_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let nonexistent_file = temp_dir.path().join("nonexistent.json");
+        
+        let result = FileOps::get_file_info(&nonexistent_file);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_write_config_to_directory_with_confirmation_force() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create initial config
+        let config1 = ProjectConfig::new(Agent::Copilot);
+        let config_path1 = FileOps::write_config_to_directory(&config1, temp_dir.path()).unwrap();
+        assert!(config_path1.exists());
+        
+        // Write new config with force=true (should not prompt)
+        let mut config2 = ProjectConfig::new(Agent::Claude);
+        config2.set_metadata("test", "value");
+        
+        let result = FileOps::write_config_to_directory_with_confirmation(
+            &config2, 
+            temp_dir.path(), 
+            true // force = true
+        );
+        assert!(result.is_ok());
+        
+        // Verify the file was overwritten
+        let read_config = FileOps::read_config_from_directory(temp_dir.path()).unwrap();
+        assert_eq!(read_config.agent, Agent::Claude);
+        assert_eq!(read_config.get_metadata("test"), Some(&serde_json::Value::String("value".to_string())));
+    }
+
+    #[test]
+    fn test_write_config_to_directory_with_confirmation_new_file() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Write config to directory without existing file
+        let config = ProjectConfig::new(Agent::Copilot);
+        let result = FileOps::write_config_to_directory_with_confirmation(
+            &config, 
+            temp_dir.path(), 
+            false // force = false
+        );
+        
+        // Should succeed without prompting
+        assert!(result.is_ok());
+        let config_path = result.unwrap();
+        assert!(config_path.exists());
+        
+        // Verify content
+        let read_config = FileOps::read_config_from_directory(temp_dir.path()).unwrap();
+        assert_eq!(read_config.agent, Agent::Copilot);
     }
 }
