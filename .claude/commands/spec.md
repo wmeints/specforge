@@ -5,14 +5,14 @@ Start a new feature by creating a specification and feature branch.
 ## Steps
 
 1. Read the user input and choose a name for the new feature.
-2. Use the git command-line utility to create a new branch with the name of the feature.
-   Use `feature/<feature-name>` for the feature branch.
-3. Read the template `.github/ISSUE_TEMPLATE/feature-specification.md` to understand how
+2. Use the git command-line utility to create a new branch with the name of the
+   feature. Use `feature/<feature-name>` for the feature branch.
+3. Read the template `.templates/specification.md` to understand how
    to build the specification.
 4. Write the specification to a markdown file in
-   `docs/specifications/001-feature-name/feature.md`. Use the structure described in the
-   template you read. Make sure to correctly name the file following the file naming
-   guidelines below. Give the feature a unique number.
+   `docs/specifications/001-feature-name/SPECIFICATION.md`. Use the structure
+   described in the template you read. Give the feature a unique number.
+5. Run the review checklist that is part of the template.
 5. Report back to the user with the name of the branch and the filename of the
    specification so they can iterate on the specification.
 
