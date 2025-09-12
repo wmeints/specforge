@@ -87,19 +87,150 @@ impl Package {
 
     /// Validate the package structure
     pub fn validate(&self) -> Result<()> {
+        // Validate package ID
         if self.id.trim().is_empty() {
             return Err(ConfigError::invalid_package("Package ID cannot be empty"));
         }
 
+        // Package ID should not contain special characters that could cause issues
+        if self.id.contains(char::is_whitespace) {
+            return Err(ConfigError::invalid_package(format!(
+                "Package ID '{}' cannot contain whitespace characters",
+                self.id
+            )));
+        }
+
+        // Package ID should be reasonable length
+        if self.id.len() > 100 {
+            return Err(ConfigError::invalid_package(format!(
+                "Package ID '{}' is too long (max 100 characters)",
+                self.id
+            )));
+        }
+
+        // Validate version format
         if self.version.trim().is_empty() {
             return Err(ConfigError::invalid_package("Package version cannot be empty"));
         }
 
-        // Basic semantic version validation (simplified)
-        if !self.version.chars().any(|c| c.is_ascii_digit()) {
+        // Semantic version validation
+        Self::validate_semantic_version(&self.version)?;
+
+        // Validate URL if present
+        if let Some(ref url) = self.url {
+            Self::validate_url(url)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate semantic version format (major.minor.patch with optional pre-release/build)
+    fn validate_semantic_version(version: &str) -> Result<()> {
+        let trimmed = version.trim();
+        
+        // Basic format check - should start with digits
+        if !trimmed.chars().next().map_or(false, |c| c.is_ascii_digit()) {
             return Err(ConfigError::invalid_package(format!(
-                "Invalid version format: '{}'. Expected semantic version like '1.0.0'",
-                self.version
+                "Version '{}' must start with a number (e.g., '1.0.0')",
+                version
+            )));
+        }
+
+        // Check for empty pre-release or build metadata
+        if trimmed.contains("-") && trimmed.ends_with("-") {
+            return Err(ConfigError::invalid_package(format!(
+                "Version '{}' has empty pre-release identifier",
+                version
+            )));
+        }
+        
+        if trimmed.contains("+") && trimmed.ends_with("+") {
+            return Err(ConfigError::invalid_package(format!(
+                "Version '{}' has empty build metadata",
+                version
+            )));
+        }
+
+        // Split by build metadata separator first if present
+        let (main_part, _build_meta) = trimmed.split_once('+').unwrap_or((trimmed, ""));
+        
+        // Split by pre-release separator if present
+        let (version_part, _pre_release) = main_part.split_once('-').unwrap_or((main_part, ""));
+        
+        // Split core version into parts
+        let parts: Vec<&str> = version_part.split('.').collect();
+        
+        // Must have at least major version, recommend major.minor.patch
+        if parts.is_empty() {
+            return Err(ConfigError::invalid_package(format!(
+                "Version '{}' is not a valid semantic version (expected format: major.minor.patch)",
+                version
+            )));
+        }
+
+        // For strict semantic versioning, we should have at least major.minor.patch
+        if parts.len() < 3 {
+            return Err(ConfigError::invalid_package(format!(
+                "Version '{}' should have at least major.minor.patch format (e.g., '1.0.0')",
+                version
+            )));
+        }
+
+        // Validate each version component is numeric
+        for (i, part) in parts.iter().enumerate() {
+            if part.is_empty() {
+                return Err(ConfigError::invalid_package(format!(
+                    "Version '{}' has empty version component at position {}",
+                    version, i
+                )));
+            }
+            
+            if !part.chars().all(|c| c.is_ascii_digit()) {
+                let component = match i {
+                    0 => "major",
+                    1 => "minor", 
+                    2 => "patch",
+                    _ => "version component",
+                };
+                return Err(ConfigError::invalid_package(format!(
+                    "Version '{}' has invalid {} component '{}' (must be numeric)",
+                    version, component, part
+                )));
+            }
+
+            // Check for leading zeros (not allowed in semantic versioning)
+            if part.len() > 1 && part.starts_with('0') {
+                return Err(ConfigError::invalid_package(format!(
+                    "Version '{}' component '{}' cannot have leading zeros",
+                    version, part
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate URL format if provided
+    fn validate_url(url: &str) -> Result<()> {
+        let trimmed = url.trim();
+        
+        if trimmed.is_empty() {
+            return Err(ConfigError::invalid_package("Package URL cannot be empty when specified"));
+        }
+
+        // Basic URL validation - must start with http:// or https://
+        if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+            return Err(ConfigError::invalid_package(format!(
+                "Package URL '{}' must start with 'http://' or 'https://'",
+                url
+            )));
+        }
+
+        // URL should be reasonable length
+        if trimmed.len() > 500 {
+            return Err(ConfigError::invalid_package(format!(
+                "Package URL is too long (max 500 characters): '{}'",
+                url
             )));
         }
 
@@ -176,28 +307,173 @@ impl ProjectConfig {
 
     /// Validate the entire configuration
     pub fn validate(&self) -> Result<()> {
+        // Validate agent (should always be valid due to enum constraints, but check anyway)
+        Self::validate_agent(&self.agent)?;
+
         // Validate all packages
-        for package in &self.packages {
-            package.validate()?;
+        for (index, package) in self.packages.iter().enumerate() {
+            package.validate().map_err(|e| {
+                ConfigError::invalid_package(format!("Package at index {}: {}", index, e))
+            })?;
         }
 
         // Check for duplicate package IDs
+        Self::validate_unique_package_ids(&self.packages)?;
+
+        // Validate package count limits
+        if self.packages.len() > 100 {
+            return Err(ConfigError::validation_error(
+                "Too many packages (max 100 allowed)"
+            ));
+        }
+
+        // Validate required metadata fields
+        Self::validate_required_metadata(&self.metadata)?;
+
+        // Validate metadata values
+        Self::validate_metadata_values(&self.metadata)?;
+
+        Ok(())
+    }
+
+    /// Validate agent enum (mostly for completeness)
+    fn validate_agent(agent: &Agent) -> Result<()> {
+        // Agent enum ensures valid values, but we can add any business logic here
+        match agent {
+            Agent::Copilot | Agent::Claude => Ok(()),
+            // This case should never happen due to enum constraints, but included for completeness
+        }
+    }
+
+    /// Validate that all package IDs are unique
+    fn validate_unique_package_ids(packages: &[Package]) -> Result<()> {
         let mut ids = std::collections::HashSet::new();
-        for package in &self.packages {
+        for package in packages {
             if !ids.insert(&package.id) {
                 return Err(ConfigError::invalid_package(format!(
-                    "Duplicate package ID: '{}'",
+                    "Duplicate package ID: '{}'. Each package must have a unique identifier",
                     package.id
                 )));
             }
         }
+        Ok(())
+    }
 
-        // Validate required metadata
-        if !self.metadata.contains_key("created_at") {
+    /// Validate required metadata fields
+    fn validate_required_metadata(metadata: &HashMap<String, serde_json::Value>) -> Result<()> {
+        // created_at is required
+        if !metadata.contains_key("created_at") {
             return Err(ConfigError::missing_required_field("created_at"));
         }
 
+        // Validate created_at format if present
+        if let Some(created_at) = metadata.get("created_at") {
+            if let Some(timestamp_str) = created_at.as_str() {
+                // Try to parse as RFC3339 timestamp
+                if chrono::DateTime::parse_from_rfc3339(timestamp_str).is_err() {
+                    return Err(ConfigError::validation_error(format!(
+                        "Invalid created_at timestamp format: '{}'. Expected ISO 8601/RFC3339 format",
+                        timestamp_str
+                    )));
+                }
+            } else {
+                return Err(ConfigError::validation_error(
+                    "created_at must be a string in ISO 8601 format"
+                ));
+            }
+        }
+
         Ok(())
+    }
+
+    /// Validate metadata field values
+    fn validate_metadata_values(metadata: &HashMap<String, serde_json::Value>) -> Result<()> {
+        // Check for reasonable metadata size
+        if metadata.len() > 50 {
+            return Err(ConfigError::validation_error(
+                "Too many metadata fields (max 50 allowed)"
+            ));
+        }
+
+        for (key, value) in metadata {
+            // Validate key format
+            if key.trim().is_empty() {
+                return Err(ConfigError::validation_error(
+                    "Metadata keys cannot be empty"
+                ));
+            }
+
+            if key.len() > 100 {
+                return Err(ConfigError::validation_error(format!(
+                    "Metadata key '{}' is too long (max 100 characters)",
+                    key
+                )));
+            }
+
+            // Validate key characters (should be reasonable identifier)
+            if key.contains(char::is_control) {
+                return Err(ConfigError::validation_error(format!(
+                    "Metadata key '{}' contains invalid control characters",
+                    key
+                )));
+            }
+
+            // Validate project_name if present
+            if key == "project_name" {
+                if let Some(name_str) = value.as_str() {
+                    Self::validate_project_name(name_str)?;
+                } else {
+                    return Err(ConfigError::validation_error(
+                        "project_name must be a string"
+                    ));
+                }
+            }
+
+            // Validate value size for strings
+            if let Some(str_value) = value.as_str() {
+                if str_value.len() > 1000 {
+                    return Err(ConfigError::validation_error(format!(
+                        "Metadata value for key '{}' is too long (max 1000 characters)",
+                        key
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate project name format
+    fn validate_project_name(name: &str) -> Result<()> {
+        let trimmed = name.trim();
+        
+        if trimmed.is_empty() {
+            return Err(ConfigError::validation_error(
+                "project_name cannot be empty"
+            ));
+        }
+
+        if trimmed.len() > 200 {
+            return Err(ConfigError::validation_error(
+                "project_name is too long (max 200 characters)"
+            ));
+        }
+
+        // Check for control characters
+        if trimmed.contains(char::is_control) {
+            return Err(ConfigError::validation_error(
+                "project_name cannot contain control characters"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Validate configuration with detailed error context
+    pub fn validate_with_context(&self, context: &str) -> Result<()> {
+        self.validate().map_err(|e| {
+            ConfigError::validation_error(format!("Configuration validation failed in {}: {}", context, e))
+        })
     }
 
     /// Serialize to JSON string with pretty formatting
@@ -396,7 +672,7 @@ mod tests {
         let package = Package::new("test", "invalid-version");
         let result = package.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid version format"));
+        assert!(result.unwrap_err().to_string().contains("must start with a number"));
     }
 
     #[test]
@@ -562,5 +838,233 @@ mod tests {
         assert_eq!(config.get_metadata("test_key"), Some(&serde_json::Value::String("test_value".to_string())));
         assert_eq!(config.get_metadata("number_key"), Some(&serde_json::Value::Number(serde_json::Number::from(42))));
         assert_eq!(config.get_metadata("nonexistent"), None);
+    }
+
+    // Enhanced validation tests
+    #[test]
+    fn test_package_validation_whitespace_in_id() {
+        let package = Package::new("test package", "1.0.0");
+        let result = package.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot contain whitespace"));
+    }
+
+    #[test]
+    fn test_package_validation_long_id() {
+        let long_id = "a".repeat(101);
+        let package = Package::new(long_id, "1.0.0".to_string());
+        let result = package.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too long"));
+    }
+
+    #[test]
+    fn test_package_semantic_version_validation() {
+        // Valid versions
+        let valid_versions = vec![
+            "1.0.0", "0.1.0", "10.20.30", "1.2.3-alpha", "1.0.0+build", "1.2.3-beta.1+build.2"
+        ];
+        for version in valid_versions {
+            let package = Package::new("test", version);
+            assert!(package.validate().is_ok(), "Version '{}' should be valid", version);
+        }
+
+        // Invalid versions
+        let invalid_versions = vec![
+            "1.0", "1", "v1.0.0", "01.0.0", "1.01.0", "1.0.01",
+            "1.0.-1", "1..0", ".1.0.0", "1.0.0.", ""
+        ];
+        for version in invalid_versions {
+            let package = Package::new("test", version);
+            let result = package.validate();
+            assert!(result.is_err(), "Version '{}' should be invalid", version);
+        }
+    }
+
+    #[test]
+    fn test_package_url_validation() {
+        // Valid URLs
+        let valid_urls = vec![
+            "https://github.com/user/repo",
+            "http://example.com",
+            "https://api.example.com/v1/packages"
+        ];
+        for url in valid_urls {
+            let package = Package::with_url("test", url, "1.0.0");
+            assert!(package.validate().is_ok(), "URL '{}' should be valid", url);
+        }
+
+        // Invalid URLs
+        let long_url = "https://".repeat(200);
+        let invalid_urls = vec![
+            "ftp://example.com",
+            "github.com/user/repo", 
+            "not-a-url",
+            "",
+            &long_url // Too long
+        ];
+        for url in invalid_urls {
+            let package = Package::with_url("test", url, "1.0.0");
+            let result = package.validate();
+            assert!(result.is_err(), "URL '{}' should be invalid", url);
+        }
+    }
+
+    #[test]
+    fn test_project_config_package_count_limit() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        
+        // Add maximum allowed packages
+        for i in 0..100 {
+            let package = Package::new(format!("package-{}", i), "1.0.0".to_string());
+            config.add_package(package).unwrap();
+        }
+        
+        assert!(config.validate().is_ok());
+        
+        // Try to add one more
+        let extra_package = Package::new("package-extra", "1.0.0");
+        config.packages.push(extra_package); // Bypass add_package validation
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Too many packages"));
+    }
+
+    #[test]
+    fn test_project_config_invalid_timestamp() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        config.set_metadata("created_at", "invalid-timestamp");
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid created_at timestamp"));
+    }
+
+    #[test]
+    fn test_project_config_metadata_limits() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        
+        // Add maximum allowed metadata fields (49 + 1 created_at = 50)
+        for i in 0..49 {
+            config.set_metadata(&format!("key{}", i), "value");
+        }
+        
+        assert!(config.validate().is_ok());
+        
+        // Add one more to exceed limit
+        config.set_metadata("extra_key", "value");
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Too many metadata fields"));
+    }
+
+    #[test]
+    fn test_project_config_empty_metadata_key() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        config.metadata.insert("".to_string(), serde_json::Value::String("test".to_string()));
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Metadata keys cannot be empty"));
+    }
+
+    #[test]
+    fn test_project_config_long_metadata_key() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        let long_key = "a".repeat(101);
+        config.metadata.insert(long_key, serde_json::Value::String("test".to_string()));
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too long"));
+    }
+
+    #[test]
+    fn test_project_config_invalid_project_name() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        
+        // Empty project name
+        config.set_metadata("project_name", "");
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("project_name cannot be empty"));
+        
+        // Too long project name
+        let long_name = "a".repeat(201);
+        config.set_metadata("project_name", long_name);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("project_name is too long"));
+    }
+
+    #[test]
+    fn test_project_config_validation_with_context() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        config.set_metadata("created_at", "invalid");
+        
+        let result = config.validate_with_context("test context");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("test context"));
+    }
+
+    #[test]
+    fn test_package_validation_error_with_index() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        
+        // Add valid package first
+        config.add_package(Package::new("valid", "1.0.0")).unwrap();
+        
+        // Add invalid package directly to bypass add_package validation
+        config.packages.push(Package::new("", "1.0.0")); // Invalid: empty ID
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Package at index 1"));
+        assert!(error_msg.contains("Package ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_duplicate_package_ids_detailed_error() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+        
+        // Add packages with same ID directly to bypass add_package validation
+        config.packages.push(Package::new("duplicate-id", "1.0.0"));
+        config.packages.push(Package::new("duplicate-id", "2.0.0"));
+        
+        let result = config.validate();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Duplicate package ID: 'duplicate-id'"));
+        assert!(error_msg.contains("Each package must have a unique identifier"));
+    }
+
+    #[test]
+    fn test_semantic_version_validation_edge_cases() {
+        let test_cases = vec![
+            ("1.2.3-alpha.1", true),
+            ("1.2.3+20130313144700", true),
+            ("1.2.3-beta+exp.sha.5114f85", true),
+            ("10.2.3", true),
+            ("1.2.3-0123", true), // Leading zeros in pre-release are allowed
+            ("1.2.3-0123.0123", true),
+            ("1.2.3-", false), // Empty pre-release
+            ("1.2.3+", false), // Empty build metadata  
+            ("1.2.3.4", true),  // More than 3 components allowed
+            ("1", false),       // Major only - now invalid
+            ("1.2", false),     // Major.minor only - now invalid
+        ];
+
+        for (version, should_be_valid) in test_cases {
+            let package = Package::new("test", version);
+            let result = package.validate();
+            if should_be_valid {
+                assert!(result.is_ok(), "Version '{}' should be valid but got error: {:?}", 
+                       version, result.err());
+            } else {
+                assert!(result.is_err(), "Version '{}' should be invalid but was accepted", version);
+            }
+        }
     }
 }
