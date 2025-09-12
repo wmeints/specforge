@@ -33,6 +33,10 @@ Priority: [Low/Medium/High]
 
 [List the impact on any deployment workflows or scripts]
 
+### Dependencies (optional)
+
+[List any code dependencies such as internal modules and external libraries]
+
 --- 
 
 ## Implementation tasks (required)
@@ -51,7 +55,7 @@ Priority: [Low/Medium/High]
 
 ## Dependencies (required)
 
-[List the stories this user story depends on. ]
+[List the stories this user story depends on.]
 
 ## Assumptions (required)
 
