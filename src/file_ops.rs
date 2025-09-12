@@ -27,15 +27,44 @@ impl FileOps {
 
         // Create the directory and any missing parent directories
         fs::create_dir_all(path).map_err(|e| {
-            match e.kind() {
-                std::io::ErrorKind::PermissionDenied => {
-                    ConfigError::permission_denied(path)
-                }
-                _ => ConfigError::directory_creation_failed(path, e)
-            }
+            Self::enhance_directory_error(path, e)
         })?;
 
         Ok(())
+    }
+    
+    /// Enhance directory-related errors with more context
+    fn enhance_directory_error<P: AsRef<Path>>(path: P, error: std::io::Error) -> ConfigError {
+        let path = path.as_ref();
+        match error.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                ConfigError::validation_error(format!(
+                    "Permission denied: Cannot create directory '{}'. \
+                     Check that you have write permissions to the parent directory.",
+                    path.display()
+                ))
+            }
+            std::io::ErrorKind::NotFound => {
+                ConfigError::validation_error(format!(
+                    "Cannot create directory '{}': Parent directory does not exist or is inaccessible",
+                    path.display()
+                ))
+            }
+            std::io::ErrorKind::AlreadyExists => {
+                // This shouldn't happen since we check exists() first, but handle it
+                ConfigError::validation_error(format!(
+                    "Path '{}' already exists but is not a directory",
+                    path.display()
+                ))
+            }
+            std::io::ErrorKind::InvalidInput => {
+                ConfigError::validation_error(format!(
+                    "Invalid directory path: '{}' contains invalid characters",
+                    path.display()
+                ))
+            }
+            _ => ConfigError::directory_creation_failed(path, error)
+        }
     }
 
     /// Check if we have write permissions for a directory
