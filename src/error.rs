@@ -23,6 +23,8 @@ pub enum ConfigError {
     MissingRequiredField(String),
     /// Invalid package configuration
     InvalidPackage(String),
+    /// User cancelled operation
+    UserCancelled(String),
 }
 
 impl fmt::Display for ConfigError {
@@ -57,6 +59,9 @@ impl fmt::Display for ConfigError {
             }
             ConfigError::InvalidPackage(msg) => {
                 write!(f, "Invalid package configuration: {}\n\nCheck the packages array in your .reforge.json file.", msg)
+            }
+            ConfigError::UserCancelled(msg) => {
+                write!(f, "Operation cancelled: {}", msg)
             }
         }
     }
@@ -130,6 +135,16 @@ impl ConfigError {
     /// Create a validation error
     pub fn validation_error<S: Into<String>>(msg: S) -> Self {
         ConfigError::ValidationError(msg.into())
+    }
+
+    /// Create a user cancelled error
+    pub fn user_cancelled<S: Into<String>>(msg: S) -> Self {
+        ConfigError::UserCancelled(msg.into())
+    }
+
+    /// Create an I/O error with message
+    pub fn io_error<S: Into<String>>(msg: S) -> Self {
+        ConfigError::IoError(std::io::Error::new(std::io::ErrorKind::Other, msg.into()))
     }
 }
 

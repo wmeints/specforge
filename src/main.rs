@@ -43,6 +43,7 @@ fn handle_error(error: ConfigError) -> ! {
         ConfigError::DirectoryCreationFailed(_, _) => 73, // Can't create
         ConfigError::IoError(_) => 74,           // IO error
         ConfigError::JsonError(_) => 65,         // Data format error
+        ConfigError::UserCancelled(_) => 1,      // User cancelled operation
     };
     
     process::exit(exit_code);
