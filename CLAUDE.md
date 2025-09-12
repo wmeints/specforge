@@ -62,5 +62,7 @@ This project has two layers of tests:
 
 When implementing a task file, please follow these guidelines:
 
-- Make sure you're on the feature branch before making any changes
-- After completing a task, make sure to commit the changes to the branch
+1. Make sure you're on the feature branch before making any changes
+2. Implement the task as instructed
+3. Run the automated tests using the appropriate commands
+4. Commit the changes to the feature branch
