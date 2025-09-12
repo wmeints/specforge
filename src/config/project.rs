@@ -1,0 +1,1 @@
+// Configuration structures will be implemented here

@@ -57,3 +57,10 @@ This project has two layers of tests:
   https://doc.rust-lang.org/rust-by-example/testing/unit_testing.html
 - Integration tests are implemented using
   [assert_cmd](https://docs.rs/assert_cmd/latest/assert_cmd/).
+
+## Implementing tasks
+
+When implementing a task file, please follow these guidelines:
+
+- Make sure you're on the feature branch before making any changes
+- After completing a task, make sure to commit the changes to the branch
