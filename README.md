@@ -61,7 +61,7 @@ The spec-driven development approach works like this:
 
 ## Supported agents
 
-Currently, we support setting Claude Code. We're working on Github Copilot next!
+Currently, we support Claude Code. We're working on Github Copilot next!
 After that, we'll evaluate the results and add agent support as needed.
 
 ## Documentation
