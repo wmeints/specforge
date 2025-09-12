@@ -1,5 +1,6 @@
 use clap::Args;
 use std::path::PathBuf;
+use dialoguer::{Select, theme::ColorfulTheme};
 use crate::config::{Agent, ProjectConfig, Package};
 use crate::file_ops::FileOps;
 use crate::error::{ConfigError, Result};
@@ -78,7 +79,7 @@ impl InitCommand {
         println!("ℹ️  Selected agent: {}", agent);
         
         // Create project configuration
-        let config = self.create_project_config(agent)?;
+        let config = self.create_project_config(agent.clone())?;
         
         // Ensure output directory exists
         FileOps::ensure_directory_exists(&self.output_directory)?;
@@ -90,7 +91,7 @@ impl InitCommand {
         println!("✅ Successfully created Reforge configuration at: {}", config_path.display());
         
         // Display next steps
-        self.display_next_steps();
+        self.display_next_steps(&agent);
         
         Ok(())
     }
@@ -123,12 +124,42 @@ impl InitCommand {
             // Agent specified via flag
             Ok(Agent::from(agent_type.clone()))
         } else {
-            // Interactive agent selection (placeholder for now)
-            println!("ℹ️  No agent specified - interactive selection will be implemented");
-            
-            // For now, default to Copilot if no agent specified
-            // This will be replaced with interactive selection in the next task
-            Ok(Agent::Copilot)
+            // Interactive agent selection
+            self.interactive_agent_selection()
+        }
+    }
+    
+    /// Perform interactive agent selection using dialoguer
+    fn interactive_agent_selection(&self) -> Result<Agent> {
+        println!("ℹ️  No agent specified. Please select an AI agent for this project:");
+        println!();
+        
+        let agents = Agent::all();
+        let agent_options: Vec<String> = agents
+            .iter()
+            .map(|agent| format!("{} - {}", agent, agent.description()))
+            .collect();
+        
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select your AI agent")
+            .default(0)
+            .items(&agent_options)
+            .interact_opt()
+            .map_err(|e| ConfigError::io_error(format!("Failed to read user input: {}", e)))?;
+        
+        match selection {
+            Some(index) => {
+                let selected_agent = agents[index].clone();
+                println!();
+                println!("✅ Selected agent: {}", selected_agent);
+                Ok(selected_agent)
+            }
+            None => {
+                // User cancelled (Ctrl+C or Esc)
+                println!();
+                println!("❌ Agent selection cancelled by user");
+                Err(ConfigError::user_cancelled("Agent selection was cancelled"))
+            }
         }
     }
     
@@ -169,21 +200,20 @@ impl InitCommand {
     }
     
     /// Display helpful next steps to the user
-    fn display_next_steps(&self) {
+    fn display_next_steps(&self, agent: &Agent) {
         println!();
         println!("🎉 Next steps:");
         println!("   1. Review the generated .reforge.json configuration");
         println!("   2. Customize the configuration as needed");
         println!("   3. Start using your AI agent with the configured templates");
         
-        match self.determine_agent() {
-            Ok(Agent::Copilot) => {
+        match agent {
+            Agent::Copilot => {
                 println!("   4. Make sure GitHub Copilot is enabled in your editor");
             }
-            Ok(Agent::Claude) => {
+            Agent::Claude => {
                 println!("   4. Make sure Claude Code extension is installed and configured");
             }
-            Err(_) => {}
         }
     }
     
@@ -280,14 +310,8 @@ mod tests {
         };
         assert_eq!(cmd.determine_agent().unwrap(), Agent::Claude);
         
-        // No agent specified (defaults to Copilot for now)
-        let cmd = InitCommand {
-            agent: None,
-            output_directory: PathBuf::from("."),
-            project_name: None,
-            force: false,
-        };
-        assert_eq!(cmd.determine_agent().unwrap(), Agent::Copilot);
+        // No agent specified requires interactive selection which we can't test in unit tests
+        // Interactive selection tests would be in integration tests
     }
     
     #[test]
