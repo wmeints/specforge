@@ -52,12 +52,53 @@ impl From<Agent> for AgentType {
     }
 }
 
-/// Validate output directory path
+/// Validate output directory path with comprehensive checks
 fn validate_output_directory(s: &str) -> Result<PathBuf> {
     let path = PathBuf::from(s);
     
     // Validate and canonicalize the path
-    FileOps::validate_and_canonicalize_path(&path)
+    let canonical_path = FileOps::validate_and_canonicalize_path(&path)?;
+    
+    // If the path exists, verify it's a directory
+    if canonical_path.exists() {
+        if !canonical_path.is_dir() {
+            return Err(ConfigError::validation_error(format!(
+                "Output path '{}' exists but is not a directory", 
+                canonical_path.display()
+            )));
+        }
+        
+        // Check write permissions for existing directory
+        FileOps::check_write_permissions(&canonical_path).map_err(|e| {
+            ConfigError::validation_error(format!(
+                "Output directory '{}' is not writable: {}", 
+                canonical_path.display(), e
+            ))
+        })?;
+    } else {
+        // For non-existent paths, check if parent directories exist and are writable
+        if let Some(parent) = canonical_path.parent() {
+            if parent.exists() {
+                if !parent.is_dir() {
+                    return Err(ConfigError::validation_error(format!(
+                        "Parent path '{}' exists but is not a directory",
+                        parent.display()
+                    )));
+                }
+                
+                // Check write permissions on parent directory
+                FileOps::check_write_permissions(parent).map_err(|e| {
+                    ConfigError::validation_error(format!(
+                        "Cannot create directory in '{}': {}", 
+                        parent.display(), e
+                    ))
+                })?;
+            }
+            // If parent doesn't exist, that's okay - we'll create the full path later
+        }
+    }
+    
+    Ok(canonical_path)
 }
 
 impl InitCommand {
@@ -81,8 +122,16 @@ impl InitCommand {
         // Create project configuration
         let config = self.create_project_config(agent.clone())?;
         
-        // Ensure output directory exists
-        FileOps::ensure_directory_exists(&self.output_directory)?;
+        // Ensure output directory exists, with informative messages
+        if !self.output_directory.exists() {
+            println!("ℹ️  Creating output directory: {}", self.output_directory.display());
+            FileOps::ensure_directory_exists(&self.output_directory).map_err(|e| {
+                ConfigError::validation_error(format!(
+                    "Failed to create output directory '{}': {}",
+                    self.output_directory.display(), e
+                ))
+            })?;
+        }
         
         // Write configuration file
         let config_path = FileOps::write_config_to_directory(&config, &self.output_directory)?;
@@ -259,14 +308,62 @@ mod tests {
     
     #[test]
     fn test_validate_output_directory() {
+        use tempfile::TempDir;
+        
         // Valid paths
         assert!(validate_output_directory(".").is_ok());
-        assert!(validate_output_directory("./test").is_ok());
         assert!(validate_output_directory("/tmp").is_ok());
+        
+        // Test with temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_string_lossy();
+        assert!(validate_output_directory(&temp_path).is_ok());
+        
+        // Test with nested path under temp directory
+        let nested_path = temp_dir.path().join("nested").join("path");
+        let nested_str = nested_path.to_string_lossy();
+        assert!(validate_output_directory(&nested_str).is_ok());
         
         // The validator should handle path canonicalization
         let result = validate_output_directory("../test");
         assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_validate_output_directory_file_conflict() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create a regular file
+        let file_path = temp_dir.path().join("not_a_directory");
+        fs::write(&file_path, "test content").unwrap();
+        
+        // Try to use the file path as a directory - should fail
+        let file_str = file_path.to_string_lossy();
+        let result = validate_output_directory(&file_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exists but is not a directory"));
+    }
+    
+    #[test]
+    fn test_validate_output_directory_parent_file_conflict() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create a regular file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "test content").unwrap();
+        
+        // Try to create a directory under the file - should fail
+        let invalid_dir = file_path.join("subdir");
+        let invalid_str = invalid_dir.to_string_lossy();
+        let result = validate_output_directory(&invalid_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exists but is not a directory"));
     }
     
     #[test]
