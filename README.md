@@ -56,6 +56,9 @@ The spec-driven development approach works like this:
 - Finally, you can complete tasks manually or let the coding
   agent complete the work.
 
+  You can tell your agent to implement the task defined in <task-file> and it
+  will do that considering the context information available in the project.
+
 ## Supported agents
 
 Currently, we support setting Claude Code. We're working on Github Copilot next!
