@@ -92,10 +92,10 @@ mod tests {
     fn test_reverse_agent_conversion() {
         // Test conversion from reforge::config::Agent to AgentType
         let copilot_type = AgentType::from(reforge::config::Agent::Copilot);
-        matches!(copilot_type, AgentType::Copilot);
+        assert!(matches!(copilot_type, AgentType::Copilot));
         
         let claude_type = AgentType::from(reforge::config::Agent::Claude);
-        matches!(claude_type, AgentType::Claude);
+        assert!(matches!(claude_type, AgentType::Claude));
     }
 
     #[test]
