@@ -105,43 +105,43 @@ impl InitCommand {
     /// Execute the init command
     pub fn execute(&self) -> Result<()> {
         println!("ℹ️  Initializing Reforge project...");
-        
-        // Validate command arguments
-        self.validate()?;
-        
-        // Note: File existence check and confirmation is now handled in write_config_to_directory_with_confirmation
-        
+
+        // Validate command arguments with context
+        self.validate()
+            .map_err(|e| e.add_context("command validation", "Checking init command parameters"))?;
+
         // Determine agent (either from flag or interactive selection)
-        let agent = self.determine_agent()?;
+        let agent = self.determine_agent()
+            .map_err(|e| e.add_context("agent selection", "Determining which AI agent to configure"))?;
         println!("ℹ️  Selected agent: {}", agent);
-        
-        // Create project configuration
-        let config = self.create_project_config(agent.clone())?;
-        
-        // Ensure output directory exists, with informative messages
+
+        // Create project configuration with enhanced error context
+        let config = self.create_project_config(agent.clone())
+            .map_err(|e| e.add_context("configuration creation",
+                &format!("Creating configuration for {} agent", agent)))?;
+
+        // Ensure output directory exists, with enhanced error handling
         if !self.output_directory.exists() {
             println!("ℹ️  Creating output directory: {}", self.output_directory.display());
-            FileOps::ensure_directory_exists(&self.output_directory).map_err(|e| {
-                ConfigError::validation_error(format!(
-                    "Failed to create output directory '{}': {}",
-                    self.output_directory.display(), e
-                ))
-            })?;
+            FileOps::ensure_directory_exists(&self.output_directory)
+                .map_err(|e| e.add_context("directory creation",
+                    &format!("Creating output directory at {}", self.output_directory.display())))?;
         }
-        
-        // Write configuration file (with overwrite confirmation if needed)
+
+        // Write configuration file with context-aware error handling
         let config_path = FileOps::write_config_to_directory_with_confirmation(
-            &config, 
-            &self.output_directory, 
+            &config,
+            &self.output_directory,
             self.force
-        )?;
-        
+        ).map_err(|e| e.add_context("configuration file writing",
+            &format!("Writing .reforge.json to {}", self.output_directory.display())))?;
+
         // Display success message
         println!("✅ Successfully created Reforge configuration at: {}", config_path.display());
-        
+
         // Display next steps
         self.display_next_steps(&agent);
-        
+
         Ok(())
     }
     
