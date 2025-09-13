@@ -235,16 +235,43 @@ impl InitCommand {
     }
     
     /// Create default template package based on selected agent
+    ///
+    /// Creates a package entry with:
+    /// - Meaningful package ID specific to the agent
+    /// - Current crate version for version tracking
+    /// - Proper structure for future template deployment features
     fn create_default_package(&self, agent: &Agent) -> Package {
+        let package_version = env!("CARGO_PKG_VERSION");
+
         match agent {
             Agent::Copilot => Package::new(
                 "reforge-copilot-templates",
-                "1.0.0"
+                package_version
             ),
             Agent::Claude => Package::new(
-                "reforge-claude-templates", 
-                "1.0.0"
+                "reforge-claude-templates",
+                package_version
             ),
+        }
+    }
+
+    /// Create multiple template packages for an agent (if needed in the future)
+    ///
+    /// This method allows for creating multiple packages per agent, supporting
+    /// different template categories or specialized packages.
+    #[allow(dead_code)] // Future feature
+    fn create_agent_packages(&self, agent: &Agent) -> Vec<Package> {
+        let package_version = env!("CARGO_PKG_VERSION");
+
+        match agent {
+            Agent::Copilot => vec![
+                Package::new("reforge-copilot-templates", package_version),
+                // Future: Additional packages like "reforge-copilot-advanced-templates"
+            ],
+            Agent::Claude => vec![
+                Package::new("reforge-claude-templates", package_version),
+                // Future: Additional packages like "reforge-claude-advanced-templates"
+            ],
         }
     }
     
@@ -438,14 +465,16 @@ mod tests {
             project_name: None,
             force: false,
         };
-        
+
+        let expected_version = env!("CARGO_PKG_VERSION");
+
         let copilot_package = cmd.create_default_package(&Agent::Copilot);
         assert_eq!(copilot_package.id, "reforge-copilot-templates");
-        assert_eq!(copilot_package.version, "1.0.0");
-        
+        assert_eq!(copilot_package.version, expected_version);
+
         let claude_package = cmd.create_default_package(&Agent::Claude);
         assert_eq!(claude_package.id, "reforge-claude-templates");
-        assert_eq!(claude_package.version, "1.0.0");
+        assert_eq!(claude_package.version, expected_version);
     }
     
     #[test]
@@ -486,7 +515,7 @@ mod tests {
     #[test]
     fn test_force_overwrite_behavior() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create initial config
         let cmd1 = InitCommand {
             agent: Some(AgentType::Copilot),
@@ -495,11 +524,11 @@ mod tests {
             force: false,
         };
         cmd1.execute().unwrap();
-        
+
         // Try to create again without force - would normally prompt user
         // In test environment, we can't test interactive confirmation easily,
         // so we skip this part of the test
-        
+
         // Try to create again with force - should succeed
         let cmd3 = InitCommand {
             agent: Some(AgentType::Claude),
@@ -508,9 +537,103 @@ mod tests {
             force: true,
         };
         assert!(cmd3.execute().is_ok());
-        
+
         // Verify the config was overwritten (agent should be Claude now)
         let config = FileOps::read_config_from_directory(temp_dir.path()).unwrap();
         assert_eq!(config.agent, Agent::Claude);
+    }
+
+    #[test]
+    fn test_packages_array_creation_comprehensive() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test Copilot packages array creation
+        let copilot_cmd = InitCommand {
+            agent: Some(AgentType::Copilot),
+            output_directory: temp_dir.path().join("copilot").to_path_buf(),
+            project_name: Some("copilot-project".to_string()),
+            force: false,
+        };
+        copilot_cmd.execute().unwrap();
+
+        let copilot_config = FileOps::read_config_from_directory(&temp_dir.path().join("copilot")).unwrap();
+
+        // Verify packages array structure
+        assert_eq!(copilot_config.packages.len(), 1);
+        let copilot_package = &copilot_config.packages[0];
+
+        // Test acceptance criteria:
+        // - Packages array is created with appropriate template package entries
+        assert_eq!(copilot_package.id, "reforge-copilot-templates");
+
+        // - Package IDs are meaningful and consistent
+        assert!(copilot_package.id.contains("copilot"));
+        assert!(copilot_package.id.contains("templates"));
+
+        // - Version information is accurate and follows semantic versioning
+        assert_eq!(copilot_package.version, env!("CARGO_PKG_VERSION"));
+        assert!(copilot_package.validate().is_ok());
+
+        // - Package structure supports future template deployment features
+        assert!(copilot_package.url.is_none()); // Ready for future URL assignment
+
+        // Test Claude packages array creation
+        let claude_cmd = InitCommand {
+            agent: Some(AgentType::Claude),
+            output_directory: temp_dir.path().join("claude").to_path_buf(),
+            project_name: Some("claude-project".to_string()),
+            force: false,
+        };
+        claude_cmd.execute().unwrap();
+
+        let claude_config = FileOps::read_config_from_directory(&temp_dir.path().join("claude")).unwrap();
+
+        // Verify Claude packages array
+        assert_eq!(claude_config.packages.len(), 1);
+        let claude_package = &claude_config.packages[0];
+
+        // - Different agents can have different default packages if needed
+        assert_eq!(claude_package.id, "reforge-claude-templates");
+        assert_ne!(claude_package.id, copilot_package.id);
+
+        // - Version information is consistent across agents
+        assert_eq!(claude_package.version, copilot_package.version);
+
+        // Test JSON schema compliance
+        let json_string = copilot_config.to_json_string().unwrap();
+        let _parsed: ProjectConfig = serde_json::from_str(&json_string).unwrap();
+
+        // Verify JSON contains expected structure
+        assert!(json_string.contains("\"packages\""));
+        assert!(json_string.contains("\"id\""));
+        assert!(json_string.contains("\"version\""));
+        assert!(json_string.contains("reforge-copilot-templates"));
+    }
+
+    #[test]
+    fn test_package_versioning_accuracy() {
+        let cmd = InitCommand {
+            agent: Some(AgentType::Copilot),
+            output_directory: PathBuf::from("."),
+            project_name: None,
+            force: false,
+        };
+
+        let package = cmd.create_default_package(&Agent::Copilot);
+
+        // Version should match current crate version exactly
+        assert_eq!(package.version, env!("CARGO_PKG_VERSION"));
+
+        // Version should follow semantic versioning
+        let version_parts: Vec<&str> = package.version.split('.').collect();
+        assert!(version_parts.len() >= 3, "Version should have at least major.minor.patch");
+
+        // Each version component should be numeric
+        for part in &version_parts[0..3] {
+            assert!(part.parse::<u32>().is_ok(), "Version component '{}' should be numeric", part);
+        }
+
+        // Package should pass validation
+        assert!(package.validate().is_ok());
     }
 }
