@@ -213,7 +213,7 @@ impl Package {
     /// Validate URL format if provided
     fn validate_url(url: &str) -> Result<()> {
         let trimmed = url.trim();
-        
+
         if trimmed.is_empty() {
             return Err(ConfigError::invalid_package("Package URL cannot be empty when specified"));
         }
@@ -222,6 +222,15 @@ impl Package {
         if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
             return Err(ConfigError::invalid_package(format!(
                 "Package URL '{}' must start with 'http://' or 'https://'",
+                url
+            )));
+        }
+
+        // Check that there's something after the scheme
+        let min_scheme_length = if trimmed.starts_with("https://") { 8 } else { 7 }; // "https://" = 8, "http://" = 7
+        if trimmed.len() <= min_scheme_length {
+            return Err(ConfigError::invalid_package(format!(
+                "Package URL '{}' is missing domain name",
                 url
             )));
         }
@@ -1050,7 +1059,7 @@ mod tests {
             ("1.2.3-0123", true), // Leading zeros in pre-release are allowed
             ("1.2.3-0123.0123", true),
             ("1.2.3-", false), // Empty pre-release
-            ("1.2.3+", false), // Empty build metadata  
+            ("1.2.3+", false), // Empty build metadata
             ("1.2.3.4", true),  // More than 3 components allowed
             ("1", false),       // Major only - now invalid
             ("1.2", false),     // Major.minor only - now invalid
@@ -1060,11 +1069,475 @@ mod tests {
             let package = Package::new("test", version);
             let result = package.validate();
             if should_be_valid {
-                assert!(result.is_ok(), "Version '{}' should be valid but got error: {:?}", 
+                assert!(result.is_ok(), "Version '{}' should be valid but got error: {:?}",
                        version, result.err());
             } else {
                 assert!(result.is_err(), "Version '{}' should be invalid but was accepted", version);
             }
         }
+    }
+
+    // Additional comprehensive tests for complete coverage
+
+    #[test]
+    fn test_agent_enum_json_edge_cases() {
+        // Test JSON deserialization with different data types
+        let invalid_json_cases = vec![
+            "null",
+            "123",
+            "true",
+            "[]",
+            "{}",
+            "\"\"", // Empty string
+            "\"INVALID\"", // All caps invalid
+            "\"unknown\"",
+        ];
+
+        for json_case in invalid_json_cases {
+            let result: serde_json::Result<Agent> = serde_json::from_str(json_case);
+            assert!(result.is_err(), "JSON '{}' should fail to deserialize to Agent", json_case);
+        }
+
+        // Test valid JSON edge cases
+        let valid_json_cases = vec![
+            ("\"copilot\"", Agent::Copilot),
+            ("\"claude\"", Agent::Claude),
+        ];
+
+        for (json, expected) in valid_json_cases {
+            let result: Agent = serde_json::from_str(json).unwrap();
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn test_package_json_edge_cases() {
+        // Test package with null URL (should deserialize correctly)
+        let json_with_null_url = r#"{
+            "id": "test-package",
+            "url": null,
+            "version": "1.0.0"
+        }"#;
+
+        let package: Package = serde_json::from_str(json_with_null_url).unwrap();
+        assert_eq!(package.id, "test-package");
+        assert_eq!(package.url, None);
+        assert_eq!(package.version, "1.0.0");
+
+        // Test package without URL field (should deserialize correctly due to Option)
+        let json_without_url = r#"{
+            "id": "test-package",
+            "version": "1.0.0"
+        }"#;
+
+        let package: Package = serde_json::from_str(json_without_url).unwrap();
+        assert_eq!(package.url, None);
+
+        // Test package with invalid JSON structure
+        let invalid_json_cases = vec![
+            r#"{"id": "test"}"#, // Missing version
+            r#"{"version": "1.0.0"}"#, // Missing id
+            r#"{"id": 123, "version": "1.0.0"}"#, // Wrong type for id
+            r#"{"id": "test", "version": 123}"#, // Wrong type for version
+            r#"{"id": "test", "version": "1.0.0", "url": 123}"#, // Wrong type for url
+        ];
+
+        for invalid_json in invalid_json_cases {
+            let result: serde_json::Result<Package> = serde_json::from_str(invalid_json);
+            assert!(result.is_err(), "JSON '{}' should fail to deserialize", invalid_json);
+        }
+    }
+
+    #[test]
+    fn test_project_config_json_edge_cases() {
+        // Test with minimal valid JSON
+        let minimal_json = r#"{
+            "agent": "copilot",
+            "packages": [],
+            "metadata": {
+                "created_at": "2025-09-12T00:00:00Z"
+            }
+        }"#;
+
+        let config = ProjectConfig::from_json_string(minimal_json).unwrap();
+        assert_eq!(config.agent, Agent::Copilot);
+        assert!(config.packages.is_empty());
+
+        // Test with invalid agent in JSON
+        let invalid_agent_json = r#"{
+            "agent": "invalid-agent",
+            "packages": [],
+            "metadata": {
+                "created_at": "2025-09-12T00:00:00Z"
+            }
+        }"#;
+
+        let result = ProjectConfig::from_json_string(invalid_agent_json);
+        assert!(result.is_err());
+
+        // Test with missing required fields
+        let missing_agent_json = r#"{
+            "packages": [],
+            "metadata": {}
+        }"#;
+
+        let result: serde_json::Result<ProjectConfig> = serde_json::from_str(missing_agent_json);
+        assert!(result.is_err());
+
+        // Test with wrong data types
+        let wrong_types_json = r#"{
+            "agent": 123,
+            "packages": "not-an-array",
+            "metadata": "not-an-object"
+        }"#;
+
+        let result: serde_json::Result<ProjectConfig> = serde_json::from_str(wrong_types_json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_package_validation_boundary_conditions() {
+        // Test package ID at exactly 100 characters (should be valid)
+        let id_100_chars = "a".repeat(100);
+        let package = Package::new(id_100_chars, "1.0.0".to_string());
+        assert!(package.validate().is_ok());
+
+        // Test package ID at 101 characters (should be invalid)
+        let id_101_chars = "a".repeat(101);
+        let package = Package::new(id_101_chars, "1.0.0".to_string());
+        assert!(package.validate().is_err());
+
+        // Test URL at exactly 500 characters (should be valid)
+        let base_url = "https://example.com/";
+        let remaining_chars = 500 - base_url.len();
+        let long_path = "a".repeat(remaining_chars);
+        let url_500_chars = format!("{}{}", base_url, long_path);
+        let package = Package::with_url("test", &url_500_chars, "1.0.0");
+        assert!(package.validate().is_ok());
+
+        // Test URL at 501 characters (should be invalid)
+        let url_501_chars = format!("{}a", url_500_chars);
+        let package = Package::with_url("test", &url_501_chars, "1.0.0");
+        assert!(package.validate().is_err());
+    }
+
+    #[test]
+    fn test_package_validation_special_characters() {
+        // Test package ID with various special characters
+        let special_char_cases = vec![
+            ("test-package", true),  // Hyphens should be allowed
+            ("test_package", true),  // Underscores should be allowed
+            ("test.package", true),  // Dots should be allowed
+            ("test package", false), // Spaces not allowed
+            ("test\tpackage", false), // Tabs not allowed
+            ("test\npackage", false), // Newlines not allowed
+            ("test@package", true),  // @ should be allowed
+            ("test/package", true),  // Slashes should be allowed
+            ("", false),             // Empty not allowed
+            ("   ", false),          // Whitespace only not allowed
+        ];
+
+        for (id, should_be_valid) in special_char_cases {
+            let package = Package::new(id, "1.0.0");
+            let result = package.validate();
+            if should_be_valid {
+                assert!(result.is_ok(), "Package ID '{}' should be valid", id);
+            } else {
+                assert!(result.is_err(), "Package ID '{}' should be invalid", id);
+            }
+        }
+    }
+
+    #[test]
+    fn test_project_config_metadata_value_types() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test different JSON value types in metadata
+        config.set_metadata("string_value", "test string");
+        config.set_metadata("number_value", 42);
+        config.set_metadata("float_value", 3.14);
+        config.set_metadata("boolean_value", true);
+        config.set_metadata("array_value", serde_json::json!(["item1", "item2"]));
+        config.set_metadata("object_value", serde_json::json!({"nested": "value"}));
+
+        // Verify all types are stored correctly
+        assert_eq!(config.get_metadata("string_value"), Some(&serde_json::Value::String("test string".to_string())));
+        assert_eq!(config.get_metadata("number_value"), Some(&serde_json::Value::Number(serde_json::Number::from(42))));
+        assert_eq!(config.get_metadata("boolean_value"), Some(&serde_json::Value::Bool(true)));
+
+        // Verify the config is still valid with various metadata types
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_project_config_metadata_key_boundary_conditions() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test metadata key at exactly 100 characters (should be valid)
+        let key_100_chars = "a".repeat(100);
+        config.set_metadata(&key_100_chars, "value");
+        assert!(config.validate().is_ok());
+
+        // Test metadata key at 101 characters (should be invalid)
+        let key_101_chars = "a".repeat(101);
+        config.set_metadata(&key_101_chars, "value");
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_project_config_metadata_value_size_limits() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test metadata value at exactly 1000 characters (should be valid)
+        let value_1000_chars = "a".repeat(1000);
+        config.set_metadata("test_key", value_1000_chars);
+        assert!(config.validate().is_ok());
+
+        // Test metadata value at 1001 characters (should be invalid)
+        let value_1001_chars = "a".repeat(1001);
+        config.set_metadata("test_key_long", value_1001_chars);
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_project_config_created_at_timestamp_formats() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test various valid timestamp formats
+        let valid_timestamps = vec![
+            "2025-09-12T00:00:00Z",
+            "2025-09-12T00:00:00.000Z",
+            "2025-09-12T00:00:00+00:00",
+            "2025-09-12T00:00:00.123456789Z",
+        ];
+
+        for timestamp in valid_timestamps {
+            config.set_metadata("created_at", timestamp);
+            assert!(config.validate().is_ok(), "Timestamp '{}' should be valid", timestamp);
+        }
+
+        // Test invalid timestamp formats
+        let invalid_timestamps = vec![
+            "2025-09-12",           // Date only
+            "00:00:00Z",            // Time only
+            "not-a-timestamp",      // Random string
+            "2025-13-12T00:00:00Z", // Invalid month
+            "2025-09-32T00:00:00Z", // Invalid day
+            "2025-09-12T25:00:00Z", // Invalid hour
+        ];
+
+        for timestamp in invalid_timestamps {
+            config.set_metadata("created_at", timestamp);
+            assert!(config.validate().is_err(), "Timestamp '{}' should be invalid", timestamp);
+        }
+    }
+
+    #[test]
+    fn test_project_config_builder_pattern_edge_cases() {
+        // Test creating config with empty project name
+        let config = ProjectConfig::with_project_name(Agent::Claude, "");
+        assert!(config.validate().is_err());
+
+        // Test creating config with very long project name
+        let long_name = "a".repeat(201);
+        let config = ProjectConfig::with_project_name(Agent::Claude, &long_name);
+        assert!(config.validate().is_err());
+
+        // Test creating config with valid project name at boundary (200 chars)
+        let name_200_chars = "a".repeat(200);
+        let config = ProjectConfig::with_project_name(Agent::Claude, &name_200_chars);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_package_clone_and_equality() {
+        let package1 = Package::new("test-package", "1.0.0");
+        let package2 = package1.clone();
+        let package3 = Package::new("different-package", "1.0.0");
+
+        assert_eq!(package1, package2);
+        assert_ne!(package1, package3);
+
+        // Test with URL
+        let package_with_url = Package::with_url("test", "https://example.com", "1.0.0");
+        let package_with_url_clone = package_with_url.clone();
+        assert_eq!(package_with_url, package_with_url_clone);
+    }
+
+    #[test]
+    fn test_project_config_package_operations_comprehensive() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test adding multiple packages
+        let packages = vec![
+            Package::new("package1", "1.0.0"),
+            Package::new("package2", "2.0.0"),
+            Package::with_url("package3", "https://example.com", "3.0.0"),
+        ];
+
+        for package in packages {
+            assert!(config.add_package(package).is_ok());
+        }
+
+        assert_eq!(config.packages.len(), 3);
+
+        // Test getting packages
+        assert!(config.get_package("package1").is_some());
+        assert!(config.get_package("package2").is_some());
+        assert!(config.get_package("package3").is_some());
+        assert!(config.get_package("nonexistent").is_none());
+
+        // Test removing packages
+        let removed = config.remove_package("package2");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, "package2");
+        assert_eq!(config.packages.len(), 2);
+
+        // Test removing non-existent package
+        let not_removed = config.remove_package("nonexistent");
+        assert!(not_removed.is_none());
+        assert_eq!(config.packages.len(), 2);
+    }
+
+    #[test]
+    fn test_json_serialization_formatting() {
+        let mut config = ProjectConfig::with_project_name(Agent::Claude, "test-project");
+        let package = Package::with_url("test-package", "https://example.com", "1.0.0");
+        config.add_package(package).unwrap();
+
+        let json = config.to_json_string().unwrap();
+
+        // Verify JSON is pretty-printed (contains newlines and indentation)
+        assert!(json.contains('\n'));
+        assert!(json.contains("  ")); // Indentation
+
+        // Verify JSON structure
+        assert!(json.contains("\"agent\": \"claude\""));
+        assert!(json.contains("\"packages\": ["));
+        assert!(json.contains("\"metadata\": {"));
+
+        // Test round-trip with formatting preserved
+        let parsed_config = ProjectConfig::from_json_string(&json).unwrap();
+        assert_eq!(config.agent, parsed_config.agent);
+        assert_eq!(config.packages, parsed_config.packages);
+    }
+
+    #[test]
+    fn test_package_validation_url_edge_cases() {
+        // Test URLs with different schemes
+        let url_test_cases = vec![
+            ("https://example.com", true),
+            ("http://example.com", true),
+            ("ftp://example.com", false),   // FTP not allowed
+            ("file://example.com", false), // File not allowed
+            ("example.com", false),         // Missing scheme
+            ("://example.com", false),     // Empty scheme
+            ("https://", false),           // Missing domain
+        ];
+
+        for (url, should_be_valid) in url_test_cases {
+            let package = Package::with_url("test", url, "1.0.0");
+            let result = package.validate();
+            if should_be_valid {
+                assert!(result.is_ok(), "URL '{}' should be valid", url);
+            } else {
+                assert!(result.is_err(), "URL '{}' should be invalid", url);
+            }
+        }
+    }
+
+    #[test]
+    fn test_agent_enum_complete_coverage() {
+        // Test all methods on Agent enum
+        for agent in Agent::all() {
+            // Test string conversion round-trip
+            let string_repr = agent.to_string();
+            let parsed_back: Agent = string_repr.parse().unwrap();
+            assert_eq!(agent, parsed_back);
+
+            // Test JSON conversion round-trip
+            let json_repr = serde_json::to_string(&agent).unwrap();
+            let parsed_from_json: Agent = serde_json::from_str(&json_repr).unwrap();
+            assert_eq!(agent, parsed_from_json);
+
+            // Test description is not empty
+            assert!(!agent.description().is_empty());
+
+            // Test clone and equality
+            let cloned = agent.clone();
+            assert_eq!(agent, cloned);
+        }
+
+        // Test agent names consistency
+        let all_agents = Agent::all();
+        let all_names = Agent::all_names();
+        assert_eq!(all_agents.len(), all_names.len());
+
+        for (agent, name) in all_agents.iter().zip(all_names.iter()) {
+            assert_eq!(&agent.to_string(), name);
+        }
+    }
+
+    #[test]
+    fn test_project_config_metadata_special_characters() {
+        let config = ProjectConfig::new(Agent::Copilot);
+
+        // Test metadata keys with various characters
+        let key_test_cases = vec![
+            ("normal_key", true),
+            ("key-with-hyphens", true),
+            ("key.with.dots", true),
+            ("key@with@symbols", true),
+            ("key_with_unicode_🚀", true),
+            ("key\x00with\x00nulls", false), // Control characters not allowed
+            ("key\twith\ttabs", false),       // Control characters not allowed
+            ("key\nwith\nnewlines", false),  // Control characters not allowed
+        ];
+
+        for (key, should_be_valid) in key_test_cases {
+            let mut test_config = config.clone();
+            test_config.set_metadata(key, "test_value");
+
+            let result = test_config.validate();
+            if should_be_valid {
+                assert!(result.is_ok(), "Metadata key '{}' should be valid", key);
+            } else {
+                assert!(result.is_err(), "Metadata key '{}' should be invalid", key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_performance_with_large_datasets() {
+        let mut config = ProjectConfig::new(Agent::Copilot);
+
+        // Test with maximum allowed packages
+        for i in 0..100 {
+            let package = Package::new(format!("package-{:03}", i), "1.0.0".to_string());
+            config.add_package(package).unwrap();
+        }
+
+        // Test validation performance with large package count
+        let start = std::time::Instant::now();
+        assert!(config.validate().is_ok());
+        let duration = start.elapsed();
+
+        // Validation should complete quickly even with many packages
+        assert!(duration.as_millis() < 100, "Validation took too long: {:?}", duration);
+
+        // Test JSON serialization performance
+        let start = std::time::Instant::now();
+        let json = config.to_json_string().unwrap();
+        let duration = start.elapsed();
+
+        assert!(duration.as_millis() < 100, "JSON serialization took too long: {:?}", duration);
+        assert!(json.len() > 1000); // Should be substantial JSON
+
+        // Test JSON deserialization performance
+        let start = std::time::Instant::now();
+        let _parsed = ProjectConfig::from_json_string(&json).unwrap();
+        let duration = start.elapsed();
+
+        assert!(duration.as_millis() < 100, "JSON deserialization took too long: {:?}", duration);
     }
 }
