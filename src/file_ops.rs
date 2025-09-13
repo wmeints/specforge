@@ -1,9 +1,10 @@
 use crate::config::ProjectConfig;
 use crate::error::{ConfigError, Result};
+use chrono::DateTime;
 use dialoguer::{Confirm, theme::ColorfulTheme};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 /// Configuration file name constant
 pub const CONFIG_FILE_NAME: &str = ".reforge.json";
@@ -18,44 +19,9 @@ pub struct FileInfo {
 
 /// Format a Unix timestamp into a human-readable date/time string
 fn format_timestamp(timestamp: u64) -> String {
-    match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp)) {
-        Some(system_time) => {
-            // Convert to local time representation
-            // For now, use a simple UTC format since chrono isn't available
-            use std::time::Duration;
-            let duration = system_time
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::ZERO);
-            let secs = duration.as_secs();
-
-            // Simple date formatting (not locale-aware, but functional)
-            let days = secs / 86400; // seconds per day
-            let hours = (secs % 86400) / 3600;
-            let minutes = (secs % 3600) / 60;
-            let seconds = secs % 60;
-
-            // Calculate approximate date (rough calculation from Unix epoch)
-            let _epoch_days = 719163; // Days between year 1 and Unix epoch (1970-01-01)
-            let _total_days = _epoch_days + days;
-
-            // Simple year calculation (not accounting for leap years perfectly)
-            let year = 1970 + (days / 365);
-            let day_of_year = days % 365;
-            let month = (day_of_year / 30) + 1; // Rough month calculation
-            let day = (day_of_year % 30) + 1;
-
-            format!(
-                "{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
-                year,
-                month.min(12),
-                day.min(31),
-                hours,
-                minutes,
-                seconds
-            )
-        }
-        None => "Invalid timestamp".to_string(),
-    }
+    let datetime = DateTime::from_timestamp(timestamp as i64, 0)
+        .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap());
+    datetime.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
 
 /// File operations for configuration management
