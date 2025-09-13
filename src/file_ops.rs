@@ -85,7 +85,12 @@ impl FileOps {
         Self::ensure_directory_exists(dir_path)?;
 
         // Try to create a temporary file to test write permissions
-        let temp_file_path = dir_path.join(".reforge_temp_test");
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let temp_file_name = format!(".reforge_temp_test_{}", unique_suffix);
+        let temp_file_path = dir_path.join(temp_file_name);
 
         match fs::write(&temp_file_path, "") {
             Ok(()) => {
