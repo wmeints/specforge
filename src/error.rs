@@ -44,8 +44,8 @@ impl fmt::Display for ConfigError {
         match self {
             ConfigError::IoError(err) => {
                 let (suggestion, _debug_info) = Self::analyze_io_error(err);
-                write!(f, "File system operation failed: {}\n\n{}\n\nDebug info: {} (ErrorKind: {:?})",
-                    err, suggestion, err, err.kind())
+                write!(f, "File system operation failed: {}\n\n{}\n\nDebug info: (ErrorKind: {:?})",
+                    err, suggestion, err.kind())
             }
             ConfigError::JsonError(err) => {
                 write!(f, "Failed to parse JSON configuration: {}\n\nEnsure the .reforge.json file contains valid JSON syntax.\nTip: You can validate JSON online or use 'cat .reforge.json | jq .' to check formatting.\n\nDebug info: Line {}, Column {}",
