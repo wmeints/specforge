@@ -1,9 +1,9 @@
-# Reforge
+# Specforge
 
-Welcome to Reforge, a tool to help you get started with spec-driven development
-using AI. This repository contains the sources for the Reforge tool. You can use
-this tool to quickly set up your project for spec-driven development using
-an AI coding agent.
+Welcome to Specforge, a tool to help you get started with spec-driven
+development using AI. This repository contains the sources for the Specforge
+tool. You can use this tool to quickly set up your project for spec-driven
+development using an AI coding agent.
 
 ------
 
@@ -14,13 +14,13 @@ and should only be used if you love experimenting with spec-driven development.
 
 ## Getting started
 
-Download the latest release of the Reforge CLI, and make sure it is in your
+Download the latest release of the Specforge CLI, and make sure it is in your
 `PATH` environment variable.
 
 Then, run the following command to initialize your project:
 
 ```shell
-reforge init
+specforge init
 ```
 
 The tool will ask for the agent you're using (Claude Code or Github Copilot)
@@ -79,7 +79,7 @@ After that, we'll evaluate the results and add agent support as needed.
 
 - **What operating systems are supported?**  
   We support Windows, Mac, and Linux. The prompt templates themselves are
-  saved as markdown files in your project, and Reforge isn't involved in
+  saved as markdown files in your project, and Specforge isn't involved in
   using them.
 
 - **Can I customize the prompt templates?**  

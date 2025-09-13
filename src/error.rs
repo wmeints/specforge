@@ -48,19 +48,19 @@ impl fmt::Display for ConfigError {
                     err, suggestion, err.kind())
             }
             ConfigError::JsonError(err) => {
-                write!(f, "Failed to parse JSON configuration: {}\n\nEnsure the .reforge.json file contains valid JSON syntax.\nTip: You can validate JSON online or use 'cat .reforge.json | jq .' to check formatting.\n\nDebug info: Line {}, Column {}",
+                write!(f, "Failed to parse JSON configuration: {}\n\nEnsure the .specforge.json file contains valid JSON syntax.\nTip: You can validate JSON online or use 'cat .specforge.json | jq .' to check formatting.\n\nDebug info: Line {}, Column {}",
                     err,
                     err.line(),
                     err.column())
             }
             ConfigError::ValidationError(msg) => {
-                write!(f, "Configuration validation failed: {}\n\nPlease check your configuration file format and ensure all required fields are present.\nFor reference, run 'reforge init' to see the expected format.", msg)
+                write!(f, "Configuration validation failed: {}\n\nPlease check your configuration file format and ensure all required fields are present.\nFor reference, run 'specforge init' to see the expected format.", msg)
             }
             ConfigError::InvalidAgent(agent) => {
-                write!(f, "Invalid agent '{}' specified.\n\nSupported agents are:\n  • 'copilot' - GitHub Copilot integration\n  • 'claude' - Anthropic Claude integration\n\nExamples:\n  reforge init --agent copilot\n  reforge init --agent claude", agent)
+                write!(f, "Invalid agent '{}' specified.\n\nSupported agents are:\n  • 'copilot' - GitHub Copilot integration\n  • 'claude' - Anthropic Claude integration\n\nExamples:\n  specforge init --agent copilot\n  specforge init --agent claude", agent)
             }
             ConfigError::FileExists(path) => {
-                write!(f, "Configuration file already exists at: {}\n\nOptions:\n  • Use 'reforge init --force' to overwrite\n  • Choose a different directory with '--output-directory <path>'\n  • Remove the existing file manually: rm {}",
+                write!(f, "Configuration file already exists at: {}\n\nOptions:\n  • Use 'specforge init --force' to overwrite\n  • Choose a different directory with '--output-directory <path>'\n  • Remove the existing file manually: rm {}",
                     path.display(), path.display())
             }
             ConfigError::PermissionDenied(path) => {
@@ -77,10 +77,10 @@ impl fmt::Display for ConfigError {
                     path.display(), path.display(), path.display(), path.display())
             }
             ConfigError::MissingRequiredField(field) => {
-                write!(f, "Required field '{}' is missing from configuration.\n\nQuick fix:\n  1. Backup current config: cp .reforge.json .reforge.json.backup\n  2. Recreate config: reforge init\n  3. Merge custom settings from backup if needed", field)
+                write!(f, "Required field '{}' is missing from configuration.\n\nQuick fix:\n  1. Backup current config: cp .specforge.json .specforge.json.backup\n  2. Recreate config: specforge init\n  3. Merge custom settings from backup if needed", field)
             }
             ConfigError::InvalidPackage(msg) => {
-                write!(f, "Invalid package configuration: {}\n\nPackage requirements:\n  • ID must be non-empty and contain no whitespace\n  • Version must follow semantic versioning (e.g., '1.0.0')\n  • URL (if provided) must start with 'http://' or 'https://'\n\nCheck the packages array in your .reforge.json file.", msg)
+                write!(f, "Invalid package configuration: {}\n\nPackage requirements:\n  • ID must be non-empty and contain no whitespace\n  • Version must follow semantic versioning (e.g., '1.0.0')\n  • URL (if provided) must start with 'http://' or 'https://'\n\nCheck the packages array in your .specforge.json file.", msg)
             }
             ConfigError::UserCancelled(msg) => {
                 write!(f, "Operation cancelled: {}\n\nYou can restart the operation at any time.", msg)
@@ -362,10 +362,10 @@ mod tests {
 
     #[test]
     fn test_file_exists_error() {
-        let error = ConfigError::file_exists("/test/.reforge.json");
+        let error = ConfigError::file_exists("/test/.specforge.json");
         let msg = error.to_string();
         assert!(msg.contains("Configuration file already exists"));
-        assert!(msg.contains("/test/.reforge.json"));
+        assert!(msg.contains("/test/.specforge.json"));
         assert!(msg.contains("--force"));
     }
 
@@ -374,7 +374,7 @@ mod tests {
         let error = ConfigError::missing_required_field("agent");
         let msg = error.to_string();
         assert!(msg.contains("Required field 'agent'"));
-        assert!(msg.contains("reforge init"));
+        assert!(msg.contains("specforge init"));
     }
 
     #[test]

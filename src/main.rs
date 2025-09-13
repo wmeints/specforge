@@ -1,18 +1,18 @@
 use clap::{Parser, Subcommand};
-use reforge::ConfigError;
-use reforge::cli::InitCommand;
+use specforge::ConfigError;
+use specforge::cli::InitCommand;
 use std::process;
 
-/// Reforge CLI - Configure source control for AI-driven development
+/// Specforge CLI - Configure source control for AI-driven development
 #[derive(Parser)]
 #[command(
-    name = "reforge",
+    name = "specforge",
     version,
     about = "Configure source control for AI-driven development through GitHub Copilot or Claude Code",
-    long_about = "Reforge allows developers to configure their source control for AI-driven development \
+    long_about = "Specforge allows developers to configure their source control for AI-driven development \
                  by quickly deploying custom prompt templates for coding agents. Follow a specification-driven \
                  workflow where you handle specifications and review while the AI handles the coding.",
-    author = "Reforge Contributors"
+    author = "Specforge Contributors"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -22,7 +22,7 @@ pub struct Cli {
 /// Available commands
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Initialize a new Reforge project with agent configuration
+    /// Initialize a new Specforge project with agent configuration
     Init(InitCommand),
 }
 
@@ -30,7 +30,7 @@ pub enum Commands {
 /// Handle CLI errors and exit with appropriate codes
 fn handle_error(error: ConfigError) -> ! {
     // Log error details securely for debugging (without sensitive info)
-    if std::env::var("REFORGE_DEBUG").is_ok() {
+    if std::env::var("SPECFORGE_DEBUG").is_ok() {
         error.log_securely();
     }
 
@@ -70,7 +70,7 @@ fn main() {
 mod tests {
     use super::*;
     use clap::CommandFactory;
-    use reforge::cli::AgentType;
+    use specforge::cli::AgentType;
 
     #[test]
     fn test_cli_structure() {
@@ -80,21 +80,21 @@ mod tests {
 
     #[test]
     fn test_agent_type_conversion() {
-        // Test conversion from AgentType to reforge::config::Agent
-        let copilot_agent = reforge::config::Agent::from(AgentType::Copilot);
-        assert_eq!(copilot_agent, reforge::config::Agent::Copilot);
+        // Test conversion from AgentType to specforge::config::Agent
+        let copilot_agent = specforge::config::Agent::from(AgentType::Copilot);
+        assert_eq!(copilot_agent, specforge::config::Agent::Copilot);
         
-        let claude_agent = reforge::config::Agent::from(AgentType::Claude);
-        assert_eq!(claude_agent, reforge::config::Agent::Claude);
+        let claude_agent = specforge::config::Agent::from(AgentType::Claude);
+        assert_eq!(claude_agent, specforge::config::Agent::Claude);
     }
 
     #[test]
     fn test_reverse_agent_conversion() {
-        // Test conversion from reforge::config::Agent to AgentType
-        let copilot_type = AgentType::from(reforge::config::Agent::Copilot);
+        // Test conversion from specforge::config::Agent to AgentType
+        let copilot_type = AgentType::from(specforge::config::Agent::Copilot);
         assert!(matches!(copilot_type, AgentType::Copilot));
         
-        let claude_type = AgentType::from(reforge::config::Agent::Claude);
+        let claude_type = AgentType::from(specforge::config::Agent::Claude);
         assert!(matches!(claude_type, AgentType::Claude));
     }
 

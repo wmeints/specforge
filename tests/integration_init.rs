@@ -5,8 +5,8 @@ use std::path::Path;
 use tempfile::TempDir;
 
 /// Helper function to create a command for testing
-fn reforge_cmd() -> Command {
-    Command::cargo_bin("reforge").unwrap()
+fn specforge_cmd() -> Command {
+    Command::cargo_bin("specforge").unwrap()
 }
 
 /// Helper function to validate JSON file content
@@ -48,7 +48,7 @@ fn validate_json_content(file_path: &Path, expected_agent: &str) {
 fn test_init_with_copilot_agent() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -56,12 +56,12 @@ fn test_init_with_copilot_agent() {
         .arg(temp_dir.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Initializing Reforge project"))
+        .stdout(predicate::str::contains("Initializing Specforge project"))
         .stdout(predicate::str::contains("Selected agent: copilot"))
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Validate file creation and content
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     validate_json_content(&config_path, "copilot");
 }
 
@@ -69,7 +69,7 @@ fn test_init_with_copilot_agent() {
 fn test_init_with_claude_agent() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -77,12 +77,12 @@ fn test_init_with_claude_agent() {
         .arg(temp_dir.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Initializing Reforge project"))
+        .stdout(predicate::str::contains("Initializing Specforge project"))
         .stdout(predicate::str::contains("Selected agent: claude"))
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Validate file creation and content
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     validate_json_content(&config_path, "claude");
 }
 
@@ -90,7 +90,7 @@ fn test_init_with_claude_agent() {
 fn test_init_with_project_name() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -100,10 +100,10 @@ fn test_init_with_project_name() {
         .arg(temp_dir.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Validate project name in JSON
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     let content = fs::read_to_string(&config_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
@@ -119,27 +119,27 @@ fn test_init_to_current_directory() {
     let temp_dir = TempDir::new().unwrap();
 
     // Change to temp directory and run init without output-directory
-    reforge_cmd()
+    specforge_cmd()
         .current_dir(temp_dir.path())
         .arg("init")
         .arg("--agent")
         .arg("claude")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Validate file creation in current directory
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     validate_json_content(&config_path, "claude");
 }
 
 #[test]
 fn test_init_with_force_overwrite() {
     let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
 
     // Create initial config
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -152,7 +152,7 @@ fn test_init_with_force_overwrite() {
     validate_json_content(&config_path, "copilot");
 
     // Overwrite with force flag
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -161,7 +161,7 @@ fn test_init_with_force_overwrite() {
         .arg("--force")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Verify config was overwritten
     validate_json_content(&config_path, "claude");
@@ -171,7 +171,7 @@ fn test_init_with_force_overwrite() {
 fn test_init_invalid_agent() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("invalid-agent")
@@ -183,13 +183,13 @@ fn test_init_invalid_agent() {
         .stderr(predicate::str::contains("invalid value"));
 
     // Verify no config file was created
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     assert!(!config_path.exists(), "Config file should not be created on error");
 }
 
 #[test]
 fn test_init_nonexistent_directory() {
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -207,7 +207,7 @@ fn test_init_missing_agent_flag() {
 
     // This should fail because agent is required
     // The actual behavior depends on the implementation
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--output-directory")
         .arg(temp_dir.path())
@@ -219,12 +219,12 @@ fn test_init_missing_agent_flag() {
 
 #[test]
 fn test_init_help_message() {
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Initialize a new Reforge project"))
+        .stdout(predicate::str::contains("Initialize a new Specforge project"))
         .stdout(predicate::str::contains("--agent"))
         .stdout(predicate::str::contains("--output-directory"))
         .stdout(predicate::str::contains("--project-name"))
@@ -236,7 +236,7 @@ fn test_init_creates_directory_if_needed() {
     let temp_dir = TempDir::new().unwrap();
     let nested_dir = temp_dir.path().join("new").join("nested").join("directory");
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -245,13 +245,13 @@ fn test_init_creates_directory_if_needed() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Creating output directory"))
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Verify directory and file were created
     assert!(nested_dir.exists(), "Nested directory should be created");
     assert!(nested_dir.is_dir(), "Path should be a directory");
 
-    let config_path = nested_dir.join(".reforge.json");
+    let config_path = nested_dir.join(".specforge.json");
     validate_json_content(&config_path, "copilot");
 }
 
@@ -259,7 +259,7 @@ fn test_init_creates_directory_if_needed() {
 fn test_json_schema_compliance() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -270,7 +270,7 @@ fn test_json_schema_compliance() {
         .assert()
         .success();
 
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     let content = fs::read_to_string(&config_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
@@ -308,7 +308,7 @@ fn test_json_schema_compliance() {
 fn test_init_preserves_json_formatting() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -317,7 +317,7 @@ fn test_init_preserves_json_formatting() {
         .assert()
         .success();
 
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     let content = fs::read_to_string(&config_path).unwrap();
 
     // Verify JSON is pretty-printed
@@ -333,7 +333,7 @@ fn test_init_preserves_json_formatting() {
 fn test_init_version_consistency() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -342,7 +342,7 @@ fn test_init_version_consistency() {
         .assert()
         .success();
 
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     let content = fs::read_to_string(&config_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
@@ -374,7 +374,7 @@ fn test_init_package_id_format() {
     let temp_dir = TempDir::new().unwrap();
 
     // Test Copilot package ID
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -383,7 +383,7 @@ fn test_init_package_id_format() {
         .assert()
         .success();
 
-    let copilot_config = temp_dir.path().join("copilot").join(".reforge.json");
+    let copilot_config = temp_dir.path().join("copilot").join(".specforge.json");
     let copilot_content = fs::read_to_string(&copilot_config).unwrap();
     let copilot_json: serde_json::Value = serde_json::from_str(&copilot_content).unwrap();
 
@@ -392,10 +392,10 @@ fn test_init_package_id_format() {
         .get("id").unwrap()
         .as_str().unwrap();
 
-    assert_eq!(copilot_package_id, "reforge-copilot-templates");
+    assert_eq!(copilot_package_id, "specforge-copilot-templates");
 
     // Test Claude package ID
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -404,7 +404,7 @@ fn test_init_package_id_format() {
         .assert()
         .success();
 
-    let claude_config = temp_dir.path().join("claude").join(".reforge.json");
+    let claude_config = temp_dir.path().join("claude").join(".specforge.json");
     let claude_content = fs::read_to_string(&claude_config).unwrap();
     let claude_json: serde_json::Value = serde_json::from_str(&claude_content).unwrap();
 
@@ -413,7 +413,7 @@ fn test_init_package_id_format() {
         .get("id").unwrap()
         .as_str().unwrap();
 
-    assert_eq!(claude_package_id, "reforge-claude-templates");
+    assert_eq!(claude_package_id, "specforge-claude-templates");
 
     // Package IDs should be different for different agents
     assert_ne!(copilot_package_id, claude_package_id);
@@ -423,7 +423,7 @@ fn test_init_package_id_format() {
 fn test_init_error_messages_quality() {
     // Test with permission denied scenario (if possible to simulate)
     // Note: This test might be platform-specific and may not work in all environments
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("copilot")
@@ -439,7 +439,7 @@ fn test_init_error_messages_quality() {
 fn test_init_with_all_flags() {
     let temp_dir = TempDir::new().unwrap();
 
-    reforge_cmd()
+    specforge_cmd()
         .arg("init")
         .arg("--agent")
         .arg("claude")
@@ -450,12 +450,12 @@ fn test_init_with_all_flags() {
         .arg("--force") // Should work even without existing file
         .assert()
         .success()
-        .stdout(predicate::str::contains("Initializing Reforge project"))
+        .stdout(predicate::str::contains("Initializing Specforge project"))
         .stdout(predicate::str::contains("Selected agent: claude"))
-        .stdout(predicate::str::contains("Successfully created Reforge configuration"));
+        .stdout(predicate::str::contains("Successfully created Specforge configuration"));
 
     // Validate all aspects of the generated config
-    let config_path = temp_dir.path().join(".reforge.json");
+    let config_path = temp_dir.path().join(".specforge.json");
     validate_json_content(&config_path, "claude");
 
     // Validate project name
