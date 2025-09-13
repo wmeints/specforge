@@ -629,22 +629,162 @@ mod tests {
     #[test]
     fn test_write_config_to_directory_with_confirmation_new_file() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Write config to directory without existing file
         let config = ProjectConfig::new(Agent::Copilot);
         let result = FileOps::write_config_to_directory_with_confirmation(
-            &config, 
-            temp_dir.path(), 
+            &config,
+            temp_dir.path(),
             false // force = false
         );
-        
+
         // Should succeed without prompting
         assert!(result.is_ok());
         let config_path = result.unwrap();
         assert!(config_path.exists());
-        
+
         // Verify content
         let read_config = FileOps::read_config_from_directory(temp_dir.path()).unwrap();
         assert_eq!(read_config.agent, Agent::Copilot);
+    }
+
+    // Tests for our specific business logic (not stdlib functionality)
+
+    #[test]
+    fn test_ensure_directory_exists_file_conflict() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test our specific logic: path exists but is not a directory
+        let file_path = temp_dir.path().join("not_a_directory");
+        fs::write(&file_path, "test content").unwrap();
+
+        let result = FileOps::ensure_directory_exists(&file_path);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("exists but is not a directory"));
+    }
+
+    #[test]
+    fn test_enhance_directory_error_messages() {
+        use std::io::{Error, ErrorKind};
+
+        let test_path = Path::new("/test/path");
+
+        // Test our custom error enhancement logic
+        let permission_error = Error::new(ErrorKind::PermissionDenied, "Permission denied");
+        let enhanced = FileOps::enhance_directory_error(test_path, permission_error);
+        let msg = enhanced.to_string();
+        assert!(msg.contains("Permission denied"));
+        assert!(msg.contains("write permissions"));
+
+        let not_found_error = Error::new(ErrorKind::NotFound, "Not found");
+        let enhanced = FileOps::enhance_directory_error(test_path, not_found_error);
+        let msg = enhanced.to_string();
+        assert!(msg.contains("Parent directory does not exist"));
+
+        let invalid_input_error = Error::new(ErrorKind::InvalidInput, "Invalid input");
+        let enhanced = FileOps::enhance_directory_error(test_path, invalid_input_error);
+        let msg = enhanced.to_string();
+        assert!(msg.contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_write_permission_check_and_cleanup() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test our specific logic: creates directory and cleans up temp file
+        let new_dir = temp_dir.path().join("permission_test");
+        assert!(!new_dir.exists());
+
+        assert!(FileOps::check_write_permissions(&new_dir).is_ok());
+        assert!(new_dir.exists()); // Should create directory
+
+        // Our specific behavior: temp test file should be cleaned up
+        let temp_test_file = new_dir.join(".reforge_temp_test");
+        assert!(!temp_test_file.exists());
+    }
+
+    #[test]
+    fn test_config_validation_before_write() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("invalid_config.json");
+
+        // Test our specific logic: validate config before writing
+        let mut invalid_config = ProjectConfig::new(Agent::Copilot);
+        // Create an invalid config by bypassing the normal add_package method
+        invalid_config.packages.push(Package::new("", "1.0.0")); // Invalid: empty ID
+
+        let result = FileOps::write_config(&invalid_config, &config_path);
+        assert!(result.is_err()); // Should fail validation before writing
+        assert!(!config_path.exists()); // File should not be created
+    }
+
+    #[test]
+    fn test_read_config_error_handling() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test our specific logic: how we handle corrupted JSON
+        let malformed_path = temp_dir.path().join("malformed.json");
+        fs::write(&malformed_path, "{ this is not valid json }").unwrap();
+
+        let result = FileOps::read_config(&malformed_path);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("corrupted")); // Our specific error message
+    }
+
+    #[test]
+    fn test_file_info_struct() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("info_test.json");
+        let test_content = r#"{"agent": "copilot"}"#;
+        fs::write(&test_file, test_content).unwrap();
+
+        // Test our specific FileInfo struct creation
+        let file_info = FileOps::get_file_info(&test_file).unwrap();
+        assert_eq!(file_info.path, test_file);
+        assert_eq!(file_info.size, test_content.len() as u64);
+        assert!(file_info.modified_timestamp > 0);
+    }
+
+    #[test]
+    fn test_format_timestamp_implementation() {
+        // Test our specific timestamp formatting implementation
+        // (This is our custom code, not stdlib)
+
+        // Test with known timestamp (2023-01-01 00:00:00 UTC = 1672531200)
+        let formatted = format_timestamp(1672531200);
+        assert!(formatted.contains("2023"));
+        assert!(formatted.contains("UTC"));
+        assert!(formatted.len() > 10);
+
+        // Test with epoch (0)
+        let epoch_formatted = format_timestamp(0);
+        assert!(epoch_formatted.contains("1970"));
+
+        // Test the specific format our function produces
+        assert!(formatted.matches(':').count() == 2); // HH:MM:SS format
+        assert!(formatted.matches('-').count() == 2); // YYYY-MM-DD format
+    }
+
+    #[test]
+    fn test_backup_and_cleanup_logic() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("backup_test.json");
+
+        // Test our specific backup workflow
+        let config1 = ProjectConfig::new(Agent::Copilot);
+        FileOps::write_config(&config1, &config_path).unwrap();
+
+        let config2 = ProjectConfig::new(Agent::Claude);
+        assert!(FileOps::write_config_with_backup(&config2, &config_path).is_ok());
+
+        // Our specific behavior: backup file should be cleaned up
+        let backup_path = config_path.with_extension("json.backup");
+        assert!(!backup_path.exists());
+
+        // Verify the write actually happened
+        let updated_config = FileOps::read_config(&config_path).unwrap();
+        assert_eq!(updated_config.agent, Agent::Claude);
     }
 }
