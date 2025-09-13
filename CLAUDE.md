@@ -65,4 +65,3 @@ When implementing a task file, please follow these guidelines:
 1. Make sure you're on the feature branch before making any changes
 2. Implement the task as instructed
 3. Run the automated tests using the appropriate commands
-4. Commit the changes to the feature branch
