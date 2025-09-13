@@ -5,7 +5,7 @@ use clap::Args;
 use dialoguer::{Select, theme::ColorfulTheme};
 use std::path::PathBuf;
 
-/// Initialize a new Reforge project with agent configuration
+/// Initialize a new Specforge project with agent configuration
 #[derive(Args)]
 pub struct InitCommand {
     /// The AI agent to configure for this project
@@ -106,7 +106,7 @@ fn validate_output_directory(s: &str) -> Result<PathBuf> {
 impl InitCommand {
     /// Execute the init command
     pub fn execute(&self) -> Result<()> {
-        println!("ℹ️  Initializing Reforge project...");
+        println!("ℹ️  Initializing Specforge project...");
 
         // Validate command arguments with context
         self.validate()
@@ -153,7 +153,7 @@ impl InitCommand {
             e.add_context(
                 "configuration file writing",
                 &format!(
-                    "Writing .reforge.json to {}",
+                    "Writing .specforge.json to {}",
                     self.output_directory.display()
                 ),
             )
@@ -161,7 +161,7 @@ impl InitCommand {
 
         // Display success message
         println!(
-            "✅ Successfully created Reforge configuration at: {}",
+            "✅ Successfully created Specforge configuration at: {}",
             config_path.display()
         );
 
@@ -251,7 +251,7 @@ impl InitCommand {
         config.add_package(default_package)?;
 
         // Set additional metadata
-        config.set_metadata("initialized_by", "reforge-cli");
+        config.set_metadata("initialized_by", "specforge-cli");
         config.set_metadata("version", env!("CARGO_PKG_VERSION"));
 
         // Validate the configuration
@@ -270,8 +270,8 @@ impl InitCommand {
         let package_version = env!("CARGO_PKG_VERSION");
 
         match agent {
-            Agent::Copilot => Package::new("reforge-copilot-templates", package_version),
-            Agent::Claude => Package::new("reforge-claude-templates", package_version),
+            Agent::Copilot => Package::new("specforge-copilot-templates", package_version),
+            Agent::Claude => Package::new("specforge-claude-templates", package_version),
         }
     }
 
@@ -285,12 +285,12 @@ impl InitCommand {
 
         match agent {
             Agent::Copilot => vec![
-                Package::new("reforge-copilot-templates", package_version),
-                // Future: Additional packages like "reforge-copilot-advanced-templates"
+                Package::new("specforge-copilot-templates", package_version),
+                // Future: Additional packages like "specforge-copilot-advanced-templates"
             ],
             Agent::Claude => vec![
-                Package::new("reforge-claude-templates", package_version),
-                // Future: Additional packages like "reforge-claude-advanced-templates"
+                Package::new("specforge-claude-templates", package_version),
+                // Future: Additional packages like "specforge-claude-advanced-templates"
             ],
         }
     }
@@ -299,7 +299,7 @@ impl InitCommand {
     fn display_next_steps(&self, agent: &Agent) {
         println!();
         println!("🎉 Next steps:");
-        println!("   1. Review the generated .reforge.json configuration");
+        println!("   1. Review the generated .specforge.json configuration");
         println!("   2. Customize the configuration as needed");
         println!("   3. Start using your AI agent with the configured templates");
 
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(config.agent, Agent::Claude);
         assert_eq!(config.project_name(), Some("test-project"));
         assert_eq!(config.packages.len(), 1);
-        assert_eq!(config.packages[0].id, "reforge-claude-templates");
+        assert_eq!(config.packages[0].id, "specforge-claude-templates");
         assert!(config.get_metadata("initialized_by").is_some());
         assert!(config.get_metadata("version").is_some());
     }
@@ -502,11 +502,11 @@ mod tests {
         let expected_version = env!("CARGO_PKG_VERSION");
 
         let copilot_package = cmd.create_default_package(&Agent::Copilot);
-        assert_eq!(copilot_package.id, "reforge-copilot-templates");
+        assert_eq!(copilot_package.id, "specforge-copilot-templates");
         assert_eq!(copilot_package.version, expected_version);
 
         let claude_package = cmd.create_default_package(&Agent::Claude);
-        assert_eq!(claude_package.id, "reforge-claude-templates");
+        assert_eq!(claude_package.id, "specforge-claude-templates");
         assert_eq!(claude_package.version, expected_version);
     }
 
@@ -598,7 +598,7 @@ mod tests {
 
         // Test acceptance criteria:
         // - Packages array is created with appropriate template package entries
-        assert_eq!(copilot_package.id, "reforge-copilot-templates");
+        assert_eq!(copilot_package.id, "specforge-copilot-templates");
 
         // - Package IDs are meaningful and consistent
         assert!(copilot_package.id.contains("copilot"));
@@ -628,7 +628,7 @@ mod tests {
         let claude_package = &claude_config.packages[0];
 
         // - Different agents can have different default packages if needed
-        assert_eq!(claude_package.id, "reforge-claude-templates");
+        assert_eq!(claude_package.id, "specforge-claude-templates");
         assert_ne!(claude_package.id, copilot_package.id);
 
         // - Version information is consistent across agents
@@ -642,7 +642,7 @@ mod tests {
         assert!(json_string.contains("\"packages\""));
         assert!(json_string.contains("\"id\""));
         assert!(json_string.contains("\"version\""));
-        assert!(json_string.contains("reforge-copilot-templates"));
+        assert!(json_string.contains("specforge-copilot-templates"));
     }
 
     #[test]

@@ -1,11 +1,11 @@
 # Instructions
 
-This file provides guidance to Claude Code when working on the reforge
+This file provides guidance to Claude Code when working on the specforge
 codebase.
 
 ## Project overview
 
-This is the **Reforge** CLI project that allows developers to configure their
+This is the **Specforge** CLI project that allows developers to configure their
 source control for AI-driven developments through Github Copilot or Claude
 Code.
 

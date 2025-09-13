@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 /// Configuration file name constant
-pub const CONFIG_FILE_NAME: &str = ".reforge.json";
+pub const CONFIG_FILE_NAME: &str = ".specforge.json";
 
 /// File information for display in confirmation prompts
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ impl FileOps {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let temp_file_name = format!(".reforge_temp_test_{}", unique_suffix);
+        let temp_file_name = format!(".specforge_temp_test_{}", unique_suffix);
         let temp_file_path = dir_path.join(temp_file_name);
 
         match fs::write(&temp_file_path, "") {
@@ -165,7 +165,7 @@ impl FileOps {
         Ok(config)
     }
 
-    /// Write a ProjectConfig to the standard .reforge.json file in a directory
+    /// Write a ProjectConfig to the standard .specforge.json file in a directory
     pub fn write_config_to_directory<P: AsRef<Path>>(
         config: &ProjectConfig,
         dir_path: P,
@@ -177,7 +177,7 @@ impl FileOps {
         Ok(config_path)
     }
 
-    /// Read a ProjectConfig from the standard .reforge.json file in a directory
+    /// Read a ProjectConfig from the standard .specforge.json file in a directory
     pub fn read_config_from_directory<P: AsRef<Path>>(dir_path: P) -> Result<ProjectConfig> {
         let dir_path = dir_path.as_ref();
         let config_path = dir_path.join(CONFIG_FILE_NAME);
@@ -185,7 +185,7 @@ impl FileOps {
         Self::read_config(config_path)
     }
 
-    /// Check if a .reforge.json file exists in a directory
+    /// Check if a .specforge.json file exists in a directory
     pub fn config_exists_in_directory<P: AsRef<Path>>(dir_path: P) -> bool {
         let config_path = dir_path.as_ref().join(CONFIG_FILE_NAME);
         config_path.exists()
@@ -672,7 +672,7 @@ mod tests {
         assert!(new_dir.exists()); // Should create directory
 
         // Our specific behavior: temp test file should be cleaned up
-        let temp_test_file = new_dir.join(".reforge_temp_test");
+        let temp_test_file = new_dir.join(".specforge_temp_test");
         assert!(!temp_test_file.exists());
     }
 
