@@ -133,7 +133,11 @@ impl ConfigError {
             }
         };
 
-        let debug_info = format!("OS Error: {} (Kind: {:?})", err.raw_os_error().unwrap_or(-1), err.kind());
+        let debug_info = format!(
+            "OS Error: {} (Kind: {:?})",
+            err.raw_os_error().map_or_else(|| "Unknown".to_string(), |code| code.to_string()),
+            err.kind()
+        );
         (suggestion, debug_info)
     }
 }
