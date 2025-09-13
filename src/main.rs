@@ -29,23 +29,22 @@ pub enum Commands {
 
 /// Handle CLI errors and exit with appropriate codes
 fn handle_error(error: ConfigError) -> ! {
+    // Log error details securely for debugging (without sensitive info)
+    if std::env::var("REFORGE_DEBUG").is_ok() {
+        error.log_securely();
+    }
+
+    // Display user-friendly error message
     eprintln!("Error: {}", error);
-    
-    // Exit with appropriate code based on error type
-    let exit_code = match error {
-        ConfigError::PermissionDenied(_) => 13,  // Permission denied
-        ConfigError::FileExists(_) => 17,        // File exists
-        ConfigError::InvalidAgent(_) => 22,      // Invalid argument
-        ConfigError::ValidationError(_) => 22,   // Invalid argument
-        ConfigError::MissingRequiredField(_) => 22, // Invalid argument
-        ConfigError::InvalidPackage(_) => 22,    // Invalid argument
-        ConfigError::CorruptedConfig(_) => 74,   // IO error
-        ConfigError::DirectoryCreationFailed(_, _) => 73, // Can't create
-        ConfigError::IoError(_) => 74,           // IO error
-        ConfigError::JsonError(_) => 65,         // Data format error
-        ConfigError::UserCancelled(_) => 1,      // User cancelled operation
-    };
-    
+
+    // Suggest retry if the error is retryable
+    if error.is_retryable() {
+        eprintln!("\nThis error may be temporary. You can try running the command again.");
+    }
+
+    // Use the error's built-in exit code method for proper Unix conventions
+    let exit_code = error.exit_code();
+
     process::exit(exit_code);
 }
 
